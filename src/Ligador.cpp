@@ -6,6 +6,7 @@
 
 void Ligador::executar(const std::string &arquivo1, const std::string &arquivo2, const std::string &arquivoSaida)
 {
+    std::cout << "Ligando arquivos: " << arquivo1 << ", " << arquivo2 << " em " << arquivoSaida << std::endl;
     combinarArquivos(arquivo1, arquivo2, arquivoSaida);
 }
 
@@ -30,6 +31,8 @@ void Ligador::combinarArquivos(const std::string &arquivo1, const std::string &a
 
     // Combinar tabelas de definições
     std::unordered_map<std::string, int> tabelaGlobalDefinicoes = tabelaDefinicoes1;
+    int deslocamento = tabelaUso1.size(); // Tamanho do primeiro código
+
     for (const auto &definicao : tabelaDefinicoes2)
     {
         if (tabelaGlobalDefinicoes.count(definicao.first))
@@ -37,7 +40,7 @@ void Ligador::combinarArquivos(const std::string &arquivo1, const std::string &a
             std::cerr << "Erro: símbolo duplicado '" << definicao.first << "' em tabelas de definições.\n";
             exit(EXIT_FAILURE);
         }
-        tabelaGlobalDefinicoes[definicao.first] = definicao.second + tabelaUso1.size(); // Ajustar endereços
+        tabelaGlobalDefinicoes[definicao.first] = definicao.second + deslocamento; // Ajustar endereços
     }
 
     // Resolver referências externas
@@ -58,16 +61,24 @@ void Ligador::combinarArquivos(const std::string &arquivo1, const std::string &a
         }
     }
 
-    // Combinar códigos em uma única linha
+    // Combinar códigos em uma única linha com ajuste de realocação
     std::string codigo1, codigo2;
     std::getline(arq1, codigo1);
     std::getline(arq2, codigo2);
 
-    saida << codigo1 << " " << codigo2;
+    // Escrever o código combinado no arquivo de saída
+    saida << codigo1 << " ";
+    std::istringstream iss(codigo2);
+    int instrucao;
+    while (iss >> instrucao)
+    {
+        saida << (instrucao + deslocamento) << " ";
+    }
 
     arq1.close();
     arq2.close();
     saida.close();
+    std::cout << "Ligação concluída com sucesso!\n";
 }
 
 void Ligador::lerTabelas(std::ifstream &arquivo, std::unordered_map<std::string, int> &tabelaUso, std::unordered_map<std::string, int> &tabelaDefinicoes)
@@ -75,20 +86,26 @@ void Ligador::lerTabelas(std::ifstream &arquivo, std::unordered_map<std::string,
     std::string linha;
 
     // Ler tabela de uso
-    std::getline(arquivo, linha);
-    std::istringstream usoStream(linha);
-    std::string simbolo;
-    int endereco;
-    while (usoStream >> simbolo >> endereco)
+    if (std::getline(arquivo, linha))
     {
-        tabelaUso[simbolo] = endereco;
+        std::istringstream usoStream(linha);
+        std::string simbolo;
+        int endereco;
+        while (usoStream >> simbolo >> endereco)
+        {
+            tabelaUso[simbolo] = endereco;
+        }
     }
 
     // Ler tabela de definições
-    std::getline(arquivo, linha);
-    std::istringstream defStream(linha);
-    while (defStream >> simbolo >> endereco)
+    if (std::getline(arquivo, linha))
     {
-        tabelaDefinicoes[simbolo] = endereco;
+        std::istringstream defStream(linha);
+        std::string simbolo;
+        int endereco;
+        while (defStream >> simbolo >> endereco)
+        {
+            tabelaDefinicoes[simbolo] = endereco;
+        }
     }
 }

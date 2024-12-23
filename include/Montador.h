@@ -20,6 +20,9 @@ struct Diretiva
 class Montador
 {
 public:
+    // Construtor padrão
+    Montador() noexcept;
+
     // Método principal para execução do Montador
     void executar(const std::string &arquivoEntrada, const std::string &modo);
 

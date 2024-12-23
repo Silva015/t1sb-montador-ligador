@@ -33,7 +33,7 @@ void Montador::inicializarTabelaDiretivas()
     };
 }
 
-Montador::Montador()
+Montador::Montador() noexcept
 {
     inicializarTabelaInstrucoes();
     inicializarTabelaDiretivas();
