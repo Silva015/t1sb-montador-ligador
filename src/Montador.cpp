@@ -9,7 +9,7 @@ void Montador::inicializarTabelaInstrucoes()
     tabelaInstrucoes = {
         {"ADD", {1, 2}},
         {"SUB", {2, 2}},
-        {"MUL", {3, 2}},
+        {"MULT", {3, 2}},
         {"DIV", {4, 2}},
         {"JMP", {5, 2}},
         {"JMPN", {6, 2}},
@@ -114,15 +114,40 @@ void Montador::primeiraPassagem(const std::string &arquivoPre, std::unordered_ma
     int contadorPosicao = 0;
     int linhaAtual = 1;
     std::string linha;
+    bool encontrouSectionText = false;
+    bool emSectionText = false;
+    bool emSectionData = false;
 
     while (std::getline(arquivo, linha))
     {
         std::istringstream iss(linha);
-        std::string rotulo, instrucao, operandos;
 
+        // Verifica as diretivas SECTION
+        if (linha.find("SECTION") != std::string::npos)
+        {
+            if (linha.find("TEXT") != std::string::npos)
+            {
+                emSectionText = true;
+                emSectionData = false;
+                encontrouSectionText = true;
+            }
+            else if (linha.find("DATA") != std::string::npos)
+            {
+                emSectionText = false;
+                emSectionData = true;
+            }
+            else
+            {
+                reportarErro("Diretiva SECTION inválida.", linhaAtual);
+            }
+            linhaAtual++;
+            continue;
+        }
+
+        std::string rotulo, instrucao;
         iss >> rotulo;
 
-        // Verifica se é um rótulo
+        // Verifica e trata rótulos
         if (rotulo.back() == ':')
         {
             rotulo.pop_back();
@@ -130,10 +155,7 @@ void Montador::primeiraPassagem(const std::string &arquivoPre, std::unordered_ma
             {
                 reportarErro("Rótulo redefinido: " + rotulo, linhaAtual);
             }
-            else
-            {
-                tabelaSimbolos[rotulo] = contadorPosicao;
-            }
+            tabelaSimbolos[rotulo] = contadorPosicao;
             iss >> instrucao;
         }
         else
@@ -141,34 +163,24 @@ void Montador::primeiraPassagem(const std::string &arquivoPre, std::unordered_ma
             instrucao = rotulo;
         }
 
-        // Diretivas `PUBLIC` e `EXTERN`
-        if (instrucao == "PUBLIC")
+        // Validação de diretivas e instruções
+        if (tabelaDiretivas.find(instrucao) != tabelaDiretivas.end())
         {
-            iss >> operandos;
-            if (operandos.empty())
+            if (instrucao == "SPACE" || instrucao == "CONST")
             {
-                reportarErro("Diretiva PUBLIC requer um rótulo.", linhaAtual);
+                if (!emSectionData)
+                {
+                    reportarErro("Diretiva de dados fora da seção DATA.", linhaAtual);
+                }
+                contadorPosicao++;
             }
-            // Marca o rótulo como público para o ligador
-            tabelaSimbolos[operandos] = -1; // `-1` indica símbolo exportado
-        }
-        else if (instrucao == "EXTERN")
-        {
-            iss >> operandos;
-            if (operandos.empty())
-            {
-                reportarErro("Diretiva EXTERN requer um rótulo.", linhaAtual);
-            }
-            // Marca o rótulo como externo
-            tabelaSimbolos[operandos] = -2; // `-2` indica símbolo importado
-        }
-        // Verifica outras diretivas e instruções
-        else if (tabelaDiretivas.find(instrucao) != tabelaDiretivas.end())
-        {
-            // (Implementação da lógica de `SPACE` e `CONST`)
         }
         else if (tabelaInstrucoes.find(instrucao) != tabelaInstrucoes.end())
         {
+            if (!emSectionText)
+            {
+                reportarErro("Instrução fora da seção TEXT.", linhaAtual);
+            }
             contadorPosicao += tabelaInstrucoes[instrucao].tamanho;
         }
         else
@@ -180,6 +192,12 @@ void Montador::primeiraPassagem(const std::string &arquivoPre, std::unordered_ma
     }
 
     arquivo.close();
+
+    // Verificação final: a seção TEXT é obrigatória
+    if (!encontrouSectionText)
+    {
+        reportarErro("Seção TEXT ausente no programa.", 0);
+    }
 }
 
 void Montador::segundaPassagem(const std::string &arquivoPre, const std::string &arquivoObj, const std::unordered_map<std::string, int> &tabelaSimbolos)
@@ -194,18 +212,39 @@ void Montador::segundaPassagem(const std::string &arquivoPre, const std::string 
     }
 
     std::string linha;
+    bool emSectionText = false;
+    bool emSectionData = false;
+
     while (std::getline(arquivo, linha))
     {
         std::istringstream iss(linha);
         std::string instrucao, operandos;
 
-        iss >> instrucao >> operandos;
+        iss >> instrucao;
+
+        // Verifica se é uma seção
+        if (instrucao == "SECTIONTEXT")
+        {
+            emSectionText = true;
+            emSectionData = false;
+            continue;
+        }
+        else if (instrucao == "SECTIONDATA")
+        {
+            emSectionText = false;
+            emSectionData = true;
+            continue;
+        }
 
         if (tabelaDiretivas.find(instrucao) != tabelaDiretivas.end())
         {
             if (instrucao == "SPACE")
             {
-                int tamanho = operandos.empty() ? 1 : std::stoi(operandos);
+                int tamanho = 1;
+                if (iss >> operandos)
+                {
+                    tamanho = std::stoi(operandos);
+                }
                 for (int i = 0; i < tamanho; i++)
                 {
                     arquivoSaida << "00 ";
@@ -213,14 +252,27 @@ void Montador::segundaPassagem(const std::string &arquivoPre, const std::string 
             }
             else if (instrucao == "CONST")
             {
+                if (!(iss >> operandos))
+                {
+                    reportarErro("Diretiva CONST requer um valor.", 0);
+                }
                 arquivoSaida << operandos << " ";
             }
         }
         else if (tabelaInstrucoes.find(instrucao) != tabelaInstrucoes.end())
         {
-            arquivoSaida << tabelaInstrucoes[instrucao].opcode << " ";
-            if (!operandos.empty() && tabelaSimbolos.find(operandos) != tabelaSimbolos.end())
+            if (!emSectionText)
             {
+                reportarErro("Instruções devem estar na SECTION TEXT.", 0);
+            }
+            arquivoSaida << tabelaInstrucoes[instrucao].opcode << " ";
+
+            if (iss >> operandos)
+            {
+                if (tabelaSimbolos.find(operandos) == tabelaSimbolos.end())
+                {
+                    reportarErro("Símbolo não definido: " + operandos, 0);
+                }
                 arquivoSaida << tabelaSimbolos.at(operandos) << " ";
             }
         }
