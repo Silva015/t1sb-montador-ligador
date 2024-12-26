@@ -114,74 +114,49 @@ void Montador::primeiraPassagem(const std::string &arquivoPre, std::unordered_ma
     int contadorPosicao = 0;
     int linhaAtual = 1;
     std::string linha;
-    bool encontrouSectionText = false;
-    bool emSectionText = false;
-    bool emSectionData = false;
 
     while (std::getline(arquivo, linha))
     {
         std::istringstream iss(linha);
+        std::string palavra;
 
-        // Verifica as diretivas SECTION
-        if (linha.find("SECTION") != std::string::npos)
-        {
-            if (linha.find("TEXT") != std::string::npos)
-            {
-                emSectionText = true;
-                emSectionData = false;
-                encontrouSectionText = true;
-            }
-            else if (linha.find("DATA") != std::string::npos)
-            {
-                emSectionText = false;
-                emSectionData = true;
-            }
-            else
-            {
-                reportarErro("Diretiva SECTION inválida.", linhaAtual);
-            }
-            linhaAtual++;
-            continue;
-        }
+        std::string rotulo, instrucao, operandos;
 
-        std::string rotulo, instrucao;
+        // Verifica e separa rótulo, se houver
         iss >> rotulo;
-
-        // Verifica e trata rótulos
-        if (rotulo.back() == ':')
+        if (!rotulo.empty() && rotulo.back() == ':')
         {
-            rotulo.pop_back();
+            rotulo.pop_back(); // Remove o ':' do rótulo
             if (tabelaSimbolos.count(rotulo))
             {
                 reportarErro("Rótulo redefinido: " + rotulo, linhaAtual);
             }
-            tabelaSimbolos[rotulo] = contadorPosicao;
-            iss >> instrucao;
+            tabelaSimbolos[rotulo] = contadorPosicao; // Adiciona à tabela de símbolos
+            iss >> instrucao;                         // Lê a instrução após o rótulo
         }
         else
         {
             instrucao = rotulo;
         }
 
-        // Validação de diretivas e instruções
-        if (tabelaDiretivas.find(instrucao) != tabelaDiretivas.end())
+        if (tabelaInstrucoes.count(instrucao))
+        {
+            contadorPosicao += tabelaInstrucoes[instrucao].tamanho;
+        }
+        else if (tabelaDiretivas.count(instrucao))
         {
             if (instrucao == "SPACE" || instrucao == "CONST")
             {
-                if (!emSectionData)
-                {
-                    reportarErro("Diretiva de dados fora da seção DATA.", linhaAtual);
-                }
                 contadorPosicao++;
             }
         }
-        else if (tabelaInstrucoes.find(instrucao) != tabelaInstrucoes.end())
+        else if (instrucao == "SECTION")
         {
-            if (!emSectionText)
+            std::string argumentoSection;
+            if (!(iss >> argumentoSection) || (argumentoSection != "TEXT" && argumentoSection != "DATA"))
             {
-                reportarErro("Instrução fora da seção TEXT.", linhaAtual);
+                reportarErro("Diretiva SECTION inválida.", linhaAtual);
             }
-            contadorPosicao += tabelaInstrucoes[instrucao].tamanho;
         }
         else
         {
@@ -192,12 +167,6 @@ void Montador::primeiraPassagem(const std::string &arquivoPre, std::unordered_ma
     }
 
     arquivo.close();
-
-    // Verificação final: a seção TEXT é obrigatória
-    if (!encontrouSectionText)
-    {
-        reportarErro("Seção TEXT ausente no programa.", 0);
-    }
 }
 
 void Montador::segundaPassagem(const std::string &arquivoPre, const std::string &arquivoObj, const std::unordered_map<std::string, int> &tabelaSimbolos)
@@ -211,6 +180,7 @@ void Montador::segundaPassagem(const std::string &arquivoPre, const std::string 
         return;
     }
 
+    int linhaAtual = 1;
     std::string linha;
     bool emSectionText = false;
     bool emSectionData = false;
@@ -218,28 +188,56 @@ void Montador::segundaPassagem(const std::string &arquivoPre, const std::string 
     while (std::getline(arquivo, linha))
     {
         std::istringstream iss(linha);
-        std::string instrucao, operandos;
+        std::string rotulo, instrucao, operandos;
 
-        iss >> instrucao;
-
-        // Verifica se é uma seção
-        if (instrucao == "SECTIONTEXT")
+        // Verifica e ignora rótulo, se houver
+        iss >> rotulo;
+        if (!rotulo.empty() && rotulo.back() == ':')
         {
-            emSectionText = true;
-            emSectionData = false;
-            continue;
+            iss >> instrucao; // Lê a instrução após o rótulo
         }
-        else if (instrucao == "SECTIONDATA")
+        else
         {
-            emSectionText = false;
-            emSectionData = true;
-            continue;
+            instrucao = rotulo;
         }
 
+        // Processa diretivas SECTION
+        if (instrucao == "SECTION")
+        {
+            std::string argumentoSection;
+            if (!(iss >> argumentoSection))
+            {
+                reportarErro("Diretiva SECTION requer um argumento (TEXT ou DATA).", linhaAtual);
+            }
+
+            if (argumentoSection == "TEXT")
+            {
+                emSectionText = true;
+                emSectionData = false;
+            }
+            else if (argumentoSection == "DATA")
+            {
+                emSectionText = false;
+                emSectionData = true;
+            }
+            else
+            {
+                reportarErro("Diretiva SECTION inválida: " + argumentoSection, linhaAtual);
+            }
+            linhaAtual++;
+            continue;
+        }
+
+        // Processa diretivas
         if (tabelaDiretivas.find(instrucao) != tabelaDiretivas.end())
         {
             if (instrucao == "SPACE")
             {
+                if (!emSectionData)
+                {
+                    reportarErro("Diretiva SPACE fora da SECTION DATA.", linhaAtual);
+                }
+
                 int tamanho = 1;
                 if (iss >> operandos)
                 {
@@ -252,34 +250,46 @@ void Montador::segundaPassagem(const std::string &arquivoPre, const std::string 
             }
             else if (instrucao == "CONST")
             {
+                if (!emSectionData)
+                {
+                    reportarErro("Diretiva CONST fora da SECTION DATA.", linhaAtual);
+                }
+
                 if (!(iss >> operandos))
                 {
-                    reportarErro("Diretiva CONST requer um valor.", 0);
+                    reportarErro("Diretiva CONST requer um valor.", linhaAtual);
                 }
                 arquivoSaida << operandos << " ";
             }
         }
+        // Processa instruções
         else if (tabelaInstrucoes.find(instrucao) != tabelaInstrucoes.end())
         {
             if (!emSectionText)
             {
-                reportarErro("Instruções devem estar na SECTION TEXT.", 0);
+                reportarErro("Instruções devem estar na SECTION TEXT.", linhaAtual);
             }
+
             arquivoSaida << tabelaInstrucoes[instrucao].opcode << " ";
 
-            if (iss >> operandos)
+            std::string operando;
+            while (std::getline(iss, operando, ','))
             {
-                if (tabelaSimbolos.find(operandos) == tabelaSimbolos.end())
+                operando.erase(std::remove(operando.begin(), operando.end(), ' '), operando.end()); // Remove espaços extras
+
+                if (tabelaSimbolos.find(operando) == tabelaSimbolos.end())
                 {
-                    reportarErro("Símbolo não definido: " + operandos, 0);
+                    reportarErro("Símbolo não definido: " + operando, linhaAtual);
                 }
-                arquivoSaida << tabelaSimbolos.at(operandos) << " ";
+                arquivoSaida << tabelaSimbolos.at(operando) << " ";
             }
         }
         else
         {
-            reportarErro("Instrução ou diretiva inválida na segunda passagem: " + instrucao, 0);
+            reportarErro("Instrução ou diretiva inválida na segunda passagem: " + instrucao, linhaAtual);
         }
+
+        linhaAtual++;
     }
 
     arquivo.close();
