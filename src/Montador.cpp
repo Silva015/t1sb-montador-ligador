@@ -245,7 +245,7 @@ void Montador::segundaPassagem(const std::string &arquivoPre, const std::string 
                 }
                 for (int i = 0; i < tamanho; i++)
                 {
-                    arquivoSaida << "00 ";
+                    arquivoSaida << "0 ";
                 }
             }
             else if (instrucao == "CONST")
