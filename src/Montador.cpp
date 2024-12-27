@@ -234,7 +234,6 @@ void Montador::segundaPassagem(const std::string &arquivoPre, const std::string 
     }
 
     int linhaAtual = 1;
-    int contadorPosicao = 0; // Posição atual no código gerado
     std::string linha;
     bool emSectionText = false;
     bool emSectionData = false;
@@ -305,7 +304,6 @@ void Montador::segundaPassagem(const std::string &arquivoPre, const std::string 
                     arquivoSaida << "0 ";
                     tabelaRealocacao << "0 "; // SPACE não requer realocação
                 }
-                contadorPosicao += tamanho;
             }
             else if (instrucao == "CONST")
             {
@@ -320,7 +318,6 @@ void Montador::segundaPassagem(const std::string &arquivoPre, const std::string 
                 }
                 arquivoSaida << operandos << " ";
                 tabelaRealocacao << "0 "; // CONST não requer realocação
-                contadorPosicao++;
             }
             continue;
         }
@@ -336,8 +333,6 @@ void Montador::segundaPassagem(const std::string &arquivoPre, const std::string 
             const auto &instrucaoInfo = tabelaInstrucoes[instrucao];
             arquivoSaida << instrucaoInfo.opcode << " "; // Escreve opcode
             tabelaRealocacao << "0 ";                    // Opcode não requer realocação
-
-            contadorPosicao++;
 
             // Processa operandos
             while (std::getline(iss, operandos, ','))
@@ -365,13 +360,10 @@ void Montador::segundaPassagem(const std::string &arquivoPre, const std::string 
                 }
                 else
                 {
-                    arquivoSaida << endereco + (enderecoRelativo ? 2 : 0) << " ";
+                    arquivoSaida << endereco << " ";
                     tabelaRealocacao << "1 "; // Requer realocação
                 }
-
-                contadorPosicao++;
             }
-            continue;
         }
 
         linhaAtual++;
