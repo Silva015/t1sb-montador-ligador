@@ -4,6 +4,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <vector>
+#include <string>
 
 // Função para ler as tabelas de uso, definições e o código de um arquivo objeto
 void Ligador::lerTabelas(std::ifstream &arquivo, std::vector<TabelaUso> &tabelaUso,
@@ -38,12 +39,7 @@ void Ligador::lerTabelas(std::ifstream &arquivo, std::vector<TabelaUso> &tabelaU
     // Lê a tabela de realocação
     if (std::getline(arquivo, linha) && linha.find("R,") != std::string::npos)
     {
-        std::istringstream iss(linha.substr(3)); // Ignora "R, "
-        int valor;
-        while (iss >> valor)
-        {
-            fatorCorrecao = valor; // Realocação sempre ajustada
-        }
+        fatorCorrecao = codigo.size(); // Realocação ajustada com base no tamanho atual do código
     }
 
     // Lê o código
@@ -81,14 +77,11 @@ void Ligador::executar(const std::string &arquivo1, const std::string &arquivo2,
         }
     }
 
-    // Tabelas e código dos módulos
     std::vector<TabelaUso> tabelaUso1, tabelaUso2;
     std::vector<TabelaDefinicao> tabelaDefinicao1, tabelaDefinicao2;
     std::vector<int> codigo1, codigo2;
-
     int fatorCorrecao1 = 0, fatorCorrecao2 = 0;
 
-    // Lê o primeiro arquivo objeto
     lerTabelas(arq1, tabelaUso1, tabelaDefinicao1, codigo1, fatorCorrecao1);
 
     if (segundoArquivoPresente)
@@ -97,12 +90,13 @@ void Ligador::executar(const std::string &arquivo1, const std::string &arquivo2,
         lerTabelas(arq2, tabelaUso2, tabelaDefinicao2, codigo2, fatorCorrecao2);
     }
 
-    // Tabela global de definições
     std::unordered_map<std::string, int> tabelaGlobalDefinicoes;
+
     for (const auto &definicao : tabelaDefinicao1)
     {
         tabelaGlobalDefinicoes[definicao.simbolo] = definicao.endereco;
     }
+
     if (segundoArquivoPresente)
     {
         for (const auto &definicao : tabelaDefinicao2)
@@ -116,7 +110,6 @@ void Ligador::executar(const std::string &arquivo1, const std::string &arquivo2,
         }
     }
 
-    // Corrige endereços para tabelas de uso
     for (auto &uso : tabelaUso1)
     {
         if (!tabelaGlobalDefinicoes.count(uso.simbolo))
@@ -124,7 +117,7 @@ void Ligador::executar(const std::string &arquivo1, const std::string &arquivo2,
             std::cerr << "Erro: símbolo não definido '" << uso.simbolo << "'.\n";
             return;
         }
-        codigo1[uso.endereco] = tabelaGlobalDefinicoes[uso.simbolo];
+        codigo1[uso.endereco] += tabelaGlobalDefinicoes[uso.simbolo];
     }
 
     if (segundoArquivoPresente)
@@ -136,15 +129,15 @@ void Ligador::executar(const std::string &arquivo1, const std::string &arquivo2,
                 std::cerr << "Erro: símbolo não definido '" << uso.simbolo << "'.\n";
                 return;
             }
-            codigo2[uso.endereco] = tabelaGlobalDefinicoes[uso.simbolo];
+            codigo2[uso.endereco] += tabelaGlobalDefinicoes[uso.simbolo];
         }
     }
 
-    // Escreve o código final no arquivo de saída
     for (const auto &valor : codigo1)
     {
         saida << valor << " ";
     }
+
     if (segundoArquivoPresente)
     {
         for (const auto &valor : codigo2)
