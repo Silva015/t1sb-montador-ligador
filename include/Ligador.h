@@ -30,15 +30,16 @@ public:
 
 private:
     /**
-     * Lê tabelas de uso, definições e código de um arquivo objeto.
+     * Lê tabelas de uso, definições, realocação e código de um arquivo objeto.
      * @param arquivo Arquivo de entrada.
      * @param tabelaUso Vetor de tabela de uso.
      * @param tabelaDefinicao Vetor de tabela de definições.
      * @param codigo Vetor de código.
-     * @param fatorCorrecao Fator de correção de endereço.
+     * @param tabelaRealocacao Vetor de tabela de realocação.
      */
     void lerTabelas(std::ifstream &arquivo, std::vector<TabelaUso> &tabelaUso,
-                    std::vector<TabelaDefinicao> &tabelaDefinicao, std::vector<int> &codigo, int &fatorCorrecao);
+                    std::vector<TabelaDefinicao> &tabelaDefinicao, std::vector<int> &codigo,
+                    std::vector<int> &tabelaRealocacao);
 };
 
 #endif

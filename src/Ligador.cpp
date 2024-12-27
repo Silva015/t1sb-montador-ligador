@@ -6,16 +6,16 @@
 #include <vector>
 #include <string>
 
-// Função para ler as tabelas de uso, definições e o código de um arquivo objeto
+// Função para ler as tabelas de uso, definições, realocação e código de um arquivo objeto
 void Ligador::lerTabelas(std::ifstream &arquivo, std::vector<TabelaUso> &tabelaUso,
-                         std::vector<TabelaDefinicao> &tabelaDefinicao, std::vector<int> &codigo, int &fatorCorrecao)
+                         std::vector<TabelaDefinicao> &tabelaDefinicao, std::vector<int> &codigo,
+                         std::vector<int> &tabelaRealocacao)
 {
     std::string linha;
 
-    // Lê a tabela de uso
     while (std::getline(arquivo, linha) && linha.find("U,") != std::string::npos)
     {
-        std::istringstream iss(linha.substr(3)); // Ignora "U, "
+        std::istringstream iss(linha.substr(3));
         std::string simbolo;
         int endereco;
         while (iss >> simbolo >> endereco)
@@ -24,10 +24,9 @@ void Ligador::lerTabelas(std::ifstream &arquivo, std::vector<TabelaUso> &tabelaU
         }
     }
 
-    // Lê a tabela de definições
     while (std::getline(arquivo, linha) && linha.find("D,") != std::string::npos)
     {
-        std::istringstream iss(linha.substr(3)); // Ignora "D, "
+        std::istringstream iss(linha.substr(3));
         std::string simbolo;
         int endereco;
         while (iss >> simbolo >> endereco)
@@ -36,13 +35,16 @@ void Ligador::lerTabelas(std::ifstream &arquivo, std::vector<TabelaUso> &tabelaU
         }
     }
 
-    // Lê a tabela de realocação
     if (std::getline(arquivo, linha) && linha.find("R,") != std::string::npos)
     {
-        fatorCorrecao = codigo.size(); // Realocação ajustada com base no tamanho atual do código
+        std::istringstream iss(linha.substr(3));
+        int valor;
+        while (iss >> valor)
+        {
+            tabelaRealocacao.push_back(valor);
+        }
     }
 
-    // Lê o código
     while (std::getline(arquivo, linha))
     {
         std::istringstream iss(linha);
@@ -54,7 +56,6 @@ void Ligador::lerTabelas(std::ifstream &arquivo, std::vector<TabelaUso> &tabelaU
     }
 }
 
-// Função principal do ligador
 void Ligador::executar(const std::string &arquivo1, const std::string &arquivo2, const std::string &arquivoSaida)
 {
     std::ifstream arq1(arquivo1), arq2;
@@ -80,57 +81,65 @@ void Ligador::executar(const std::string &arquivo1, const std::string &arquivo2,
     std::vector<TabelaUso> tabelaUso1, tabelaUso2;
     std::vector<TabelaDefinicao> tabelaDefinicao1, tabelaDefinicao2;
     std::vector<int> codigo1, codigo2;
-    int fatorCorrecao1 = 0, fatorCorrecao2 = 0;
+    std::vector<int> tabelaRealocacao1, tabelaRealocacao2;
+    int fatorCorrecao2 = 0;
 
-    lerTabelas(arq1, tabelaUso1, tabelaDefinicao1, codigo1, fatorCorrecao1);
+    // Lê tabelas e códigos do primeiro módulo
+    lerTabelas(arq1, tabelaUso1, tabelaDefinicao1, codigo1, tabelaRealocacao1);
 
     if (segundoArquivoPresente)
     {
         fatorCorrecao2 = codigo1.size();
-        lerTabelas(arq2, tabelaUso2, tabelaDefinicao2, codigo2, fatorCorrecao2);
+        lerTabelas(arq2, tabelaUso2, tabelaDefinicao2, codigo2, tabelaRealocacao2);
     }
 
     std::unordered_map<std::string, int> tabelaGlobalDefinicoes;
 
+    // Adicionar definições do primeiro módulo
     for (const auto &definicao : tabelaDefinicao1)
     {
         tabelaGlobalDefinicoes[definicao.simbolo] = definicao.endereco;
     }
 
+    // Adicionar definições do segundo módulo com fator de correção
     if (segundoArquivoPresente)
     {
         for (const auto &definicao : tabelaDefinicao2)
         {
-            if (tabelaGlobalDefinicoes.count(definicao.simbolo))
-            {
-                std::cerr << "Erro: símbolo duplicado '" << definicao.simbolo << "'.\n";
-                return;
-            }
             tabelaGlobalDefinicoes[definicao.simbolo] = definicao.endereco + fatorCorrecao2;
         }
     }
 
-    for (auto &uso : tabelaUso1)
+    auto corrigirModulo = [&](std::vector<int> &codigo, std::vector<TabelaUso> &tabelaUso,
+                              std::vector<int> &tabelaRealocacao, int fatorCorrecao)
     {
-        if (!tabelaGlobalDefinicoes.count(uso.simbolo))
+        for (auto &uso : tabelaUso)
         {
-            std::cerr << "Erro: símbolo não definido '" << uso.simbolo << "'.\n";
-            return;
-        }
-        codigo1[uso.endereco] += tabelaGlobalDefinicoes[uso.simbolo];
-    }
-
-    if (segundoArquivoPresente)
-    {
-        for (auto &uso : tabelaUso2)
-        {
-            if (!tabelaGlobalDefinicoes.count(uso.simbolo))
+            if (tabelaGlobalDefinicoes.count(uso.simbolo))
+            {
+                codigo[uso.endereco] = tabelaGlobalDefinicoes[uso.simbolo];
+            }
+            else
             {
                 std::cerr << "Erro: símbolo não definido '" << uso.simbolo << "'.\n";
                 return;
             }
-            codigo2[uso.endereco] += tabelaGlobalDefinicoes[uso.simbolo];
         }
+
+        for (size_t i = 0; i < tabelaRealocacao.size(); ++i)
+        {
+            if (tabelaRealocacao[i] == 1)
+            {
+                codigo[i] += fatorCorrecao;
+            }
+        }
+    };
+
+    corrigirModulo(codigo1, tabelaUso1, tabelaRealocacao1, 0);
+
+    if (segundoArquivoPresente)
+    {
+        corrigirModulo(codigo2, tabelaUso2, tabelaRealocacao2, fatorCorrecao2);
     }
 
     for (const auto &valor : codigo1)
