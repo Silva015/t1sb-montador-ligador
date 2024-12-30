@@ -310,13 +310,13 @@ void Montador::segundaPassagem(const std::string &arquivoPre, const std::string 
                 if (endereco == -1) // Símbolo externo
                 {
                     usoSimbolos[operandos].push_back(contadorPosicao);
-                    bufferCodigoObjeto << "0 "; // Placeholder para o ligador
-                    bufferTabelaRealocacao << "1 ";
+                    bufferCodigoObjeto << deslocamento << " "; // Placeholder para o ligador, ajustado com deslocamento
+                    bufferTabelaRealocacao << "1 ";            // Requer realocação
                 }
                 else
                 {
                     bufferCodigoObjeto << (endereco + deslocamento) << " ";
-                    bufferTabelaRealocacao << "1 ";
+                    bufferTabelaRealocacao << "1 "; // Requer realocação
                 }
                 contadorPosicao++; // Incrementa posição para o operando
             }
