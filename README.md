@@ -157,19 +157,6 @@ O programa detecta os seguintes erros:
 
 ---
 
-## Estrutura do Projeto
-
-```
-.
-├── include/       # Cabeçalhos do projeto
-├── src/           # Código fonte
-├── exemplos/      # Exemplos de código Assembly
-├── Makefile       # Arquivo de compilação
-├── README.md      # Instruções do projeto
-```
-
----
-
 ## Contato
 
 - **Aluno:** Arthur Silva Carneiro  
