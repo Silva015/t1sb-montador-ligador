@@ -26,10 +26,12 @@ void Montador::inicializarTabelaInstrucoes()
 void Montador::inicializarTabelaDiretivas()
 {
     tabelaDiretivas = {
-        {"SPACE", {1}}, // Pode variar, ajustado durante o processamento
-        {"CONST", {1}}, // Sempre ocupa 1 palavra
-        {"BEGIN", {0}}, // Não ocupa espaço
-        {"END", {0}}    // Não ocupa espaço
+        {"SPACE", {1}},  // Pode variar, ajustado durante o processamento
+        {"CONST", {1}},  // Sempre ocupa 1 palavra
+        {"BEGIN", {0}},  // Não ocupa espaço
+        {"END", {0}},    // Não ocupa espaço
+        {"EXTERN", {0}}, // Não ocupa espaço
+        {"PUBLIC", {0}}  // Não ocupa espaço
     };
 }
 
@@ -118,27 +120,60 @@ void Montador::primeiraPassagem(const std::string &arquivoPre, std::unordered_ma
     while (std::getline(arquivo, linha))
     {
         std::istringstream iss(linha);
-        std::string palavra;
-
-        std::string rotulo, instrucao, operandos;
+        std::string rotulo, instrucao;
 
         // Verifica e separa rótulo, se houver
         iss >> rotulo;
         if (!rotulo.empty() && rotulo.back() == ':')
         {
             rotulo.pop_back(); // Remove o ':' do rótulo
+            iss >> instrucao;  // Lê a instrução após o rótulo
+
+            if (instrucao == "EXTERN")
+            {
+                // Se EXTERN, registra o rótulo como externo
+                if (tabelaSimbolos.count(rotulo))
+                {
+                    reportarErro("Rótulo redefinido em EXTERN: " + rotulo, linhaAtual);
+                }
+                tabelaSimbolos[rotulo] = -1; // Marca como externo
+                linhaAtual++;
+                continue;
+            }
+
+            // Se não for EXTERN, registra o rótulo normalmente
             if (tabelaSimbolos.count(rotulo))
             {
                 reportarErro("Rótulo redefinido: " + rotulo, linhaAtual);
             }
-            tabelaSimbolos[rotulo] = contadorPosicao; // Adiciona à tabela de símbolos
-            iss >> instrucao;                         // Lê a instrução após o rótulo
+            tabelaSimbolos[rotulo] = contadorPosicao;
         }
         else
         {
             instrucao = rotulo;
         }
 
+        // Tratamento para EXTERN sem rótulo
+        if (instrucao == "EXTERN")
+        {
+            std::string argumentoLabel;
+            if (!(iss >> argumentoLabel))
+            {
+                reportarErro("Diretiva EXTERN requer um argumento (LABEL).", linhaAtual);
+            }
+
+            if (tabelaSimbolos.count(argumentoLabel))
+            {
+                reportarErro("Rótulo redefinido em EXTERN: " + argumentoLabel, linhaAtual);
+            }
+
+            // Registra o argumento como símbolo externo
+            tabelaSimbolos[argumentoLabel] = -1; // Marca como externo
+            linhaAtual++;
+            continue;
+        }
+
+        // Processamento das demais instruções e diretivas
         if (tabelaInstrucoes.count(instrucao))
         {
             contadorPosicao += tabelaInstrucoes[instrucao].tamanho;
@@ -180,11 +215,25 @@ void Montador::segundaPassagem(const std::string &arquivoPre, const std::string 
         return;
     }
 
-    int linhaAtual = 1;
-    std::string linha;
-    bool emSectionText = false;
-    bool emSectionData = false;
+    // Buffers para armazenar diferentes partes do arquivo de saída
+    std::ostringstream bufferDefinicoes;
+    std::ostringstream bufferCodigoObjeto;
+    std::ostringstream bufferTabelaUso;
+    std::ostringstream bufferTabelaRealocacao;
 
+    // Adiciona símbolos públicos à tabela de definições no buffer
+    for (const auto &simbolo : tabelaSimbolos)
+    {
+        if (simbolo.second >= 0) // Símbolos definidos localmente
+        {
+            bufferDefinicoes << "D, " << simbolo.first << " " << simbolo.second << "\n";
+        }
+    }
+
+    int contadorPosicao = 0; // Contador de posição inicializado
+    std::unordered_map<std::string, std::vector<int>> usoSimbolos;
+
+    std::string linha;
     while (std::getline(arquivo, linha))
     {
         std::istringstream iss(linha);
@@ -201,43 +250,11 @@ void Montador::segundaPassagem(const std::string &arquivoPre, const std::string 
             instrucao = rotulo;
         }
 
-        // Processa diretivas SECTION
-        if (instrucao == "SECTION")
-        {
-            std::string argumentoSection;
-            if (!(iss >> argumentoSection))
-            {
-                reportarErro("Diretiva SECTION requer um argumento (TEXT ou DATA).", linhaAtual);
-            }
-
-            if (argumentoSection == "TEXT")
-            {
-                emSectionText = true;
-                emSectionData = false;
-            }
-            else if (argumentoSection == "DATA")
-            {
-                emSectionText = false;
-                emSectionData = true;
-            }
-            else
-            {
-                reportarErro("Diretiva SECTION inválida: " + argumentoSection, linhaAtual);
-            }
-            linhaAtual++;
-            continue;
-        }
-
         // Processa diretivas
         if (tabelaDiretivas.find(instrucao) != tabelaDiretivas.end())
         {
             if (instrucao == "SPACE")
             {
-                if (!emSectionData)
-                {
-                    reportarErro("Diretiva SPACE fora da SECTION DATA.", linhaAtual);
-                }
-
                 int tamanho = 1;
                 if (iss >> operandos)
                 {
@@ -245,52 +262,81 @@ void Montador::segundaPassagem(const std::string &arquivoPre, const std::string 
                 }
                 for (int i = 0; i < tamanho; i++)
                 {
-                    arquivoSaida << "0 ";
+                    bufferCodigoObjeto << "0 ";
+                    bufferTabelaRealocacao << "0 ";
+                    contadorPosicao++;
                 }
             }
             else if (instrucao == "CONST")
             {
-                if (!emSectionData)
-                {
-                    reportarErro("Diretiva CONST fora da SECTION DATA.", linhaAtual);
-                }
-
                 if (!(iss >> operandos))
                 {
-                    reportarErro("Diretiva CONST requer um valor.", linhaAtual);
+                    reportarErro("Diretiva CONST requer um valor.", contadorPosicao);
                 }
-                arquivoSaida << operandos << " ";
+                bufferCodigoObjeto << operandos << " ";
+                bufferTabelaRealocacao << "0 ";
+                contadorPosicao++;
             }
+            continue;
         }
+
         // Processa instruções
-        else if (tabelaInstrucoes.find(instrucao) != tabelaInstrucoes.end())
+        if (tabelaInstrucoes.find(instrucao) != tabelaInstrucoes.end())
         {
-            if (!emSectionText)
+            const auto &instrucaoInfo = tabelaInstrucoes[instrucao];
+            bufferCodigoObjeto << instrucaoInfo.opcode << " "; // Escreve opcode
+            bufferTabelaRealocacao << "0 ";                    // Opcode não requer realocação
+            contadorPosicao++;                                 // Incrementa posição para o opcode
+
+            // Processa operandos
+            while (std::getline(iss, operandos, ','))
             {
-                reportarErro("Instruções devem estar na SECTION TEXT.", linhaAtual);
-            }
+                operandos.erase(std::remove(operandos.begin(), operandos.end(), ' '), operandos.end()); // Remove espaços extras
 
-            arquivoSaida << tabelaInstrucoes[instrucao].opcode << " ";
-
-            std::string operando;
-            while (std::getline(iss, operando, ','))
-            {
-                operando.erase(std::remove(operando.begin(), operando.end(), ' '), operando.end()); // Remove espaços extras
-
-                if (tabelaSimbolos.find(operando) == tabelaSimbolos.end())
+                bool enderecoRelativo = operandos.find('+') != std::string::npos;
+                int deslocamento = 0;
+                if (enderecoRelativo)
                 {
-                    reportarErro("Símbolo não definido: " + operando, linhaAtual);
+                    deslocamento = std::stoi(operandos.substr(operandos.find('+') + 1));
+                    operandos = operandos.substr(0, operandos.find('+'));
                 }
-                arquivoSaida << tabelaSimbolos.at(operando) << " ";
+
+                if (tabelaSimbolos.find(operandos) == tabelaSimbolos.end())
+                {
+                    reportarErro("Símbolo não definido: " + operandos, contadorPosicao);
+                }
+
+                int endereco = tabelaSimbolos.at(operandos);
+                if (endereco == -1) // Símbolo externo
+                {
+                    usoSimbolos[operandos].push_back(contadorPosicao);
+                    bufferCodigoObjeto << deslocamento << " "; // Placeholder para o ligador, ajustado com deslocamento
+                    bufferTabelaRealocacao << "1 ";            // Requer realocação
+                }
+                else
+                {
+                    bufferCodigoObjeto << (endereco + deslocamento) << " ";
+                    bufferTabelaRealocacao << "1 "; // Requer realocação
+                }
+                contadorPosicao++; // Incrementa posição para o operando
             }
         }
-        else
-        {
-            reportarErro("Instrução ou diretiva inválida na segunda passagem: " + instrucao, linhaAtual);
-        }
-
-        linhaAtual++;
     }
+
+    // Gera tabela de uso no buffer
+    for (const auto &[simbolo, enderecos] : usoSimbolos)
+    {
+        for (int endereco : enderecos)
+        {
+            bufferTabelaUso << "U, " << simbolo << " " << endereco << "\n";
+        }
+    }
+
+    // Escreve buffers no arquivo de saída na ordem correta
+    arquivoSaida << bufferDefinicoes.str();
+    arquivoSaida << bufferTabelaUso.str();
+    arquivoSaida << "R, " << bufferTabelaRealocacao.str() << "\n";
+    arquivoSaida << bufferCodigoObjeto.str() << "\n";
 
     arquivo.close();
     arquivoSaida.close();
