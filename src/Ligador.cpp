@@ -13,49 +13,54 @@ void Ligador::lerTabelas(std::ifstream &arquivo, std::vector<TabelaUso> &tabelaU
 {
     std::string linha;
 
-    while (std::getline(arquivo, linha) && linha.find("U,") != std::string::npos)
-    {
-        std::istringstream iss(linha.substr(3));
-        std::string simbolo;
-        int endereco;
-        while (iss >> simbolo >> endereco)
-        {
-            tabelaUso.push_back({simbolo, endereco});
-        }
-    }
-
-    while (std::getline(arquivo, linha) && linha.find("D,") != std::string::npos)
-    {
-        std::istringstream iss(linha.substr(3));
-        std::string simbolo;
-        int endereco;
-        while (iss >> simbolo >> endereco)
-        {
-            tabelaDefinicao.push_back({simbolo, endereco});
-        }
-    }
-
-    if (std::getline(arquivo, linha) && linha.find("R,") != std::string::npos)
-    {
-        std::istringstream iss(linha.substr(3));
-        int valor;
-        while (iss >> valor)
-        {
-            tabelaRealocacao.push_back(valor);
-        }
-    }
-
+    // Lê a tabela de uso
     while (std::getline(arquivo, linha))
     {
-        std::istringstream iss(linha);
-        int palavra;
-        while (iss >> palavra)
+        if (linha.find("U,") == 0)
         {
-            codigo.push_back(palavra);
+            std::istringstream iss(linha.substr(3));
+            std::string simbolo;
+            int endereco;
+            while (iss >> simbolo >> endereco)
+            {
+                tabelaUso.push_back({simbolo, endereco});
+            }
+        }
+        else if (linha.find("D,") == 0)
+        {
+            // Lê a tabela de definições
+            std::istringstream iss(linha.substr(3));
+            std::string simbolo;
+            int endereco;
+            while (iss >> simbolo >> endereco)
+            {
+                tabelaDefinicao.push_back({simbolo, endereco});
+            }
+        }
+        else if (linha.find("R,") == 0)
+        {
+            // Lê a tabela de realocação
+            std::istringstream iss(linha.substr(3));
+            int valor;
+            while (iss >> valor)
+            {
+                tabelaRealocacao.push_back(valor);
+            }
+        }
+        else
+        {
+            // Lê o código objeto
+            std::istringstream iss(linha);
+            int palavra;
+            while (iss >> palavra)
+            {
+                codigo.push_back(palavra);
+            }
         }
     }
 }
 
+// Função principal do ligador
 void Ligador::executar(const std::string &arquivo1, const std::string &arquivo2, const std::string &arquivoSaida)
 {
     std::ifstream arq1(arquivo1), arq2;
@@ -93,15 +98,82 @@ void Ligador::executar(const std::string &arquivo1, const std::string &arquivo2,
         lerTabelas(arq2, tabelaUso2, tabelaDefinicao2, codigo2, tabelaRealocacao2);
     }
 
+    // print all tables
+
+    std::cout << "Tabela de Uso 1:\n";
+    for (const auto &uso : tabelaUso1)
+    {
+        std::cout << uso.simbolo << " " << uso.endereco << "\n";
+    }
+
+    if (segundoArquivoPresente)
+    {
+        std::cout << "Tabela de Uso 2:\n";
+        for (const auto &uso : tabelaUso2)
+        {
+            std::cout << uso.simbolo << " " << uso.endereco << "\n";
+        }
+    }
+
+    std::cout << "Tabela de Definição 1:\n";
+    for (const auto &definicao : tabelaDefinicao1)
+    {
+        std::cout << definicao.simbolo << " " << definicao.endereco << "\n";
+    }
+
+    if (segundoArquivoPresente)
+    {
+        std::cout << "Tabela de Definição 2:\n";
+        for (const auto &definicao : tabelaDefinicao2)
+        {
+            std::cout << definicao.simbolo << " " << definicao.endereco << "\n";
+        }
+    }
+
+    std::cout << "Código 1:\n";
+    for (const auto &valor : codigo1)
+    {
+        std::cout << valor << " ";
+    }
+    std::cout << "\n";
+
+    if (segundoArquivoPresente)
+    {
+        std::cout << "Código 2:\n";
+        for (const auto &valor : codigo2)
+        {
+            std::cout << valor << " ";
+        }
+        std::cout << "\n";
+    }
+
+    std::cout << "Tabela de Realocação 1:\n";
+    for (const auto &valor : tabelaRealocacao1)
+    {
+        std::cout << valor << " ";
+    }
+    std::cout << "\n";
+
+    if (segundoArquivoPresente)
+    {
+        std::cout << "Tabela de Realocação 2:\n";
+        for (const auto &valor : tabelaRealocacao2)
+        {
+            std::cout << valor << " ";
+        }
+        std::cout << "\n";
+    }
+
+    // Constrói a tabela global de definições
     std::unordered_map<std::string, int> tabelaGlobalDefinicoes;
 
-    // Adicionar definições do primeiro módulo
+    // Adiciona definições do primeiro módulo
     for (const auto &definicao : tabelaDefinicao1)
     {
         tabelaGlobalDefinicoes[definicao.simbolo] = definicao.endereco;
     }
 
-    // Adicionar definições do segundo módulo com fator de correção
+    // Adiciona definições do segundo módulo com fator de correção
     if (segundoArquivoPresente)
     {
         for (const auto &definicao : tabelaDefinicao2)
@@ -110,27 +182,31 @@ void Ligador::executar(const std::string &arquivo1, const std::string &arquivo2,
         }
     }
 
+    // Corrige os endereços nos códigos dos módulos
     auto corrigirModulo = [&](std::vector<int> &codigo, std::vector<TabelaUso> &tabelaUso,
                               std::vector<int> &tabelaRealocacao, int fatorCorrecao)
     {
-        for (auto &uso : tabelaUso)
+        // Corrige endereços das entradas na tabela de uso
+        for (const auto &uso : tabelaUso)
         {
             if (tabelaGlobalDefinicoes.count(uso.simbolo))
             {
+                // Substitui o placeholder pelo endereço global do símbolo
                 codigo[uso.endereco] = tabelaGlobalDefinicoes[uso.simbolo];
             }
             else
             {
                 std::cerr << "Erro: símbolo não definido '" << uso.simbolo << "'.\n";
-                return;
+                exit(EXIT_FAILURE);
             }
         }
 
+        // Corrige os endereços realocados
         for (size_t i = 0; i < tabelaRealocacao.size(); ++i)
         {
             if (tabelaRealocacao[i] == 1)
             {
-                codigo[i] += fatorCorrecao;
+                codigo[i] += fatorCorrecao; // Realoca apenas quando indicado
             }
         }
     };
@@ -142,6 +218,7 @@ void Ligador::executar(const std::string &arquivo1, const std::string &arquivo2,
         corrigirModulo(codigo2, tabelaUso2, tabelaRealocacao2, fatorCorrecao2);
     }
 
+    // Gera o código executável
     for (const auto &valor : codigo1)
     {
         saida << valor << " ";
