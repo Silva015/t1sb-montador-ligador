@@ -1,30 +1,35 @@
-# Montador e Ligador para Linguagem Assembly Inventada
+# Montador e Ligador para Linguagem Assembly
 
 ## Descrição Geral
 
-Este projeto implementa um **Montador** e um **Ligador** para uma linguagem Assembly inventada. O Montador realiza o pré-processamento e a conversão de código fonte Assembly em código objeto. O Ligador combina múltiplos arquivos objeto em um único executável, resolvendo referências externas e simbolizando tabelas de definições e uso.
+Este projeto implementa um **Montador** e um **Ligador** para uma linguagem Assembly inventada, conforme especificado no Trabalho Prático 1 de Software Básico.
+
+- O **Montador** realiza a montagem de programas Assembly em dois modos:
+  - **Pré-processamento:** Gera um arquivo `.pre` a partir de um código Assembly `.asm`.
+  - **Montagem:** Gera um arquivo `.obj` a partir de um código pré-processado `.pre`.
+- O **Ligador** combina dois arquivos `.obj` em um único executável `.e`, resolvendo referências externas e gerando o código final.
 
 ---
 
 ## Requisitos
 
-- Compilador C++ compatível com C++17.
-- Sistema operacional Linux ou compatível com Makefile.
-- Ferramenta Make instalada.
+- Sistema operacional: **Linux** ou compatível.
+- Compilador **GCC** com suporte a **C++17**.
+- Ferramenta **Make** para gerenciamento de compilação.
 
 ---
 
-## Instruções de Compilação
+## Compilação
 
-Para compilar o projeto, execute:
+Para compilar o projeto, utilize o comando:
 
 ```bash
 make
 ```
 
-Isso gerará o executável `programa` no diretório raiz.
+Isso gera os executáveis `montador` e `ligador` no diretório raiz.
 
-Para limpar os arquivos gerados (binário e objetos intermediários), use:
+Para limpar os arquivos compilados, utilize:
 
 ```bash
 make clean
@@ -36,42 +41,74 @@ make clean
 
 ### Montador
 
-O Montador possui dois modos de execução:
+#### Pré-processamento
 
-1. Para pré-processar um arquivo Assembly (`.asm`) e gerar um arquivo pré-processado (`.pre`):
-    ```bash
-    ./montador arquivo.asm
-    ```
+Para gerar um arquivo pré-processado `.pre` a partir de um código Assembly `.asm`:
 
-2. Para montar um arquivo pré-processado (`.pre`) e gerar um arquivo objeto (`.obj`):
-    ```bash
-    ./montador arquivo.pre
-    ```
+```bash
+./montador arquivo.asm
+```
+
+#### Montagem
+
+Para gerar um arquivo objeto `.obj` a partir de um código pré-processado `.pre`:
+
+```bash
+./montador arquivo.pre
+```
 
 ### Ligador
 
-O Ligador combina dois arquivos objeto (`.obj`) e gera um executável (`.e`):
+Para combinar dois arquivos objeto `.obj` e gerar um executável `.e`:
 
 ```bash
-./ligador arquivo1.obj arquivo2.obj arquivo_saida.e
+./ligador arquivo1.obj arquivo2.obj
 ```
+
+O executável gerado terá o nome `arquivo1.e`.
 
 ---
 
-## Formato dos Arquivos
+## Estrutura dos Arquivos
 
-### Arquivo `.asm`
-Deve conter as seções `TEXT` e `DATA`, além das diretivas e instruções suportadas:
-- Diretivas:
-  - `PUBLIC LABEL`: Exporta um símbolo para outros arquivos.
-  - `EXTERN LABEL`: Importa um símbolo de outro arquivo.
-  - `SPACE N`: Reserva `N` palavras de memória.
-  - `CONST N`: Atribui o valor `N` a uma posição de memória.
-- Instruções:
-  `ADD`, `SUB`, `MUL`, `DIV`, `JMP`, `JMPP`, `JMPN`, `JMPZ`, `COPY`, `LOAD`, `STORE`, `INPUT`, `OUTPUT`, `STOP`.
+### `.asm` - Código Assembly
 
-### Arquivo `.pre`
-Versão pré-processada do `.asm`, sem comentários e espaços desnecessários. Exemplo:
+- **Seções:**
+  - `SECTION TEXT`: Contém o código executável.
+  - `SECTION DATA`: Contém os dados necessários.
+- **Diretivas Suportadas:**
+  - `PUBLIC`: Exporta símbolos para outros módulos.
+  - `EXTERN`: Importa símbolos de outros módulos.
+  - `CONST`: Define um valor constante.
+  - `SPACE`: Reserva espaço de memória.
+- **Instruções Suportadas:**
+  - Aritméticas: `ADD`, `SUB`, `MULT`, `DIV`.
+  - Saltos: `JMP`, `JMPP`, `JMPN`, `JMPZ`.
+  - Entrada/Saída: `INPUT`, `OUTPUT`.
+  - Controle: `STOP`.
+
+### `.pre` - Código Pré-processado
+
+- Arquivo limpo gerado pelo pré-processador, sem comentários e com a seção `TEXT` antes da seção `DATA`.
+
+### `.obj` - Código Objeto
+
+- Contém:
+  - **Tabela de Uso:** Símbolos externos referenciados.
+  - **Tabela de Definição:** Símbolos públicos definidos no módulo.
+  - **Tabela de Realocação:** Indica posições que precisam de ajustes.
+  - **Código Máquina:** Representação numérica do programa.
+
+### `.e` - Executável
+
+- Arquivo único gerado pelo Ligador contendo o código combinado de dois módulos.
+
+---
+
+## Exemplo de Execução
+
+### Código Assembly (`mod1.asm`)
+
 ```asm
 SECTION TEXT
 PUBLIC START
@@ -82,48 +119,41 @@ VAR1: CONST 10
 END: STOP
 ```
 
-### Arquivo `.obj`
-Código objeto gerado pelo Montador, contendo:
-- Tabelas de Uso (símbolos externos).
-- Tabelas de Definição (símbolos públicos).
-- Código numérico em uma única linha.
+### Passos
 
-### Arquivo `.e`
-Arquivo executável gerado pelo Ligador. Combinação de dois arquivos `.obj`.
-
----
-
-## Exemplo de Uso
-
-### Código Assembly de Entrada (`exemplo.asm`):
-```asm
-SECTION TEXT
-PUBLIC START
-START: ADD VAR1
-JMP END
-SECTION DATA
-VAR1: CONST 10
-END: STOP
-```
-
-### Comandos:
 1. Pré-processar:
     ```bash
-    ./montador exemplo.asm
+    ./montador mod1.asm
     ```
-    Gera: `exemplo.pre`
+    Gera: `mod1.pre`
 
 2. Montar:
     ```bash
-    ./montador exemplo.pre
+    ./montador mod1.pre
     ```
-    Gera: `exemplo.obj`
+    Gera: `mod1.obj`
 
-3. Combinar com outro objeto:
+3. Ligar com outro módulo (`mod2.obj`):
     ```bash
-    ./ligador exemplo.obj outro.obj executavel.e
+    ./ligador mod1.obj mod2.obj
     ```
-    Gera: `executavel.e`
+    Gera: `mod1.e`
+
+---
+
+## Detecção de Erros
+
+O programa detecta os seguintes erros:
+
+1. **Montador:**
+   - Rótulos redefinidos.
+   - Rótulos ausentes ou inválidos.
+   - Instruções ou diretivas inválidas.
+   - Número incorreto de operandos.
+
+2. **Ligador:**
+   - Símbolos externos não resolvidos.
+   - Tabelas de uso ou definições mal formatadas.
 
 ---
 
@@ -131,32 +161,32 @@ END: STOP
 
 ```
 .
-├── include/       # Arquivos de cabeçalho
+├── include/       # Cabeçalhos do projeto
 ├── src/           # Código fonte
-├── Makefile       # Script de compilação
+├── exemplos/      # Exemplos de código Assembly
+├── Makefile       # Arquivo de compilação
 ├── README.md      # Instruções do projeto
-├── exemplo.asm    # Arquivo Assembly de exemplo
 ```
-
----
-
-## Possíveis Erros
-
-- **Rótulo redefinido**: Quando um rótulo é declarado mais de uma vez.
-- **Instrução inválida**: Instrução desconhecida ou mal formatada.
-- **Referências externas não resolvidas**: Quando um símbolo importado (`EXTERN`) não é encontrado nos arquivos combinados.
-- **Diretivas mal formatadas**:
-  - `PUBLIC` ou `EXTERN` sem rótulo.
-  - `SPACE` ou `CONST` sem valores válidos.
 
 ---
 
 ## Contato
 
-Desenvolvido por **[Arthur Silva Carneiro]**.  
-Email: [tutuscarneiro@gmail.com]
-Matrícula: [202006321]
+- **Aluno:** Arthur Silva Carneiro  
+- **Matrícula:** 202006321  
+- **Email:** tutuscarneiro@gmail.com  
 
 ---
-```
 
+### Especificações Atendidas
+
+1. **Montador:**
+   - Aceita **maiúsculas e minúsculas**.
+   - Remove **comentários** e **espaços desnecessários**.
+   - Suporta instruções e diretivas conforme especificado.
+
+2. **Ligador:**
+   - Suporta até dois módulos.
+   - Gera um executável compatível com o simulador.
+
+**O projeto foi testado e está funcional conforme os exemplos fornecidos.**
