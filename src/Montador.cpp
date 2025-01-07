@@ -3,13 +3,17 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <vector>
+#include <map>
+#include <regex>
+#include <cctype>
 
 void Montador::inicializarTabelaInstrucoes()
 {
     tabelaInstrucoes = {
         {"ADD", {1, 2}},
         {"SUB", {2, 2}},
-        {"MULT", {3, 2}},
+        {"MUL", {3, 2}},
         {"DIV", {4, 2}},
         {"JMP", {5, 2}},
         {"JMPN", {6, 2}},
@@ -59,6 +63,57 @@ void Montador::executar(const std::string &arquivoEntrada, const std::string &mo
     }
 }
 
+std::string trim(const std::string &str)
+{
+    auto start = str.find_first_not_of(" \t\n\r");
+    auto end = str.find_last_not_of(" \t\n\r");
+    return (start == std::string::npos) ? "" : str.substr(start, end - start + 1);
+}
+
+std::string upperCase(const std::string &str)
+{
+    std::string result;
+    for (char c : str)
+    {
+        result += std::toupper(c);
+    }
+    return result;
+}
+
+std::string removeSpaces(std::string &str)
+{
+    auto res = std::unique(str.begin(), str.end(), [](char lhs, char rhs)
+                           { return (lhs == rhs) && (lhs == ' '); });
+    str.erase(res, str.end());
+    return str;
+}
+
+std::string superTrim(const std::string &str)
+{
+    auto trimmed = trim(str);
+    size_t pos = trimmed.find(',');
+    if (pos != std::string::npos)
+    {
+        auto before = trim(trimmed.substr(0, pos));
+        auto after = trim(trimmed.substr(pos + 1));
+        return before + ", " + after;
+    }
+    return trimmed;
+}
+
+std::vector<std::string> split(const std::string &str, const std::string &delimiter)
+{
+    size_t pos_start = 0, pos_end;
+    std::vector<std::string> tokens;
+    while ((pos_end = str.find(delimiter, pos_start)) != std::string::npos)
+    {
+        tokens.push_back(trim(str.substr(pos_start, pos_end - pos_start)));
+        pos_start = pos_end + delimiter.length();
+    }
+    tokens.push_back(trim(str.substr(pos_start)));
+    return tokens;
+}
+
 void Montador::preProcessar(const std::string &arquivoEntrada, const std::string &arquivoSaida)
 {
     std::ifstream arquivo(arquivoEntrada);
@@ -71,31 +126,74 @@ void Montador::preProcessar(const std::string &arquivoEntrada, const std::string
     }
 
     std::string linha;
-    std::string secaoTexto, secaoDados;
+    std::string sectionText, sectionData;
+    std::string labelPendente = ""; // Armazena rótulos sozinhos temporariamente
 
     while (std::getline(arquivo, linha))
     {
         // Remove comentários
         linha = linha.substr(0, linha.find(';'));
+        linha = trim(linha); // Remove espaços extras no início e no fim
 
-        // Normaliza para maiúsculas
-        std::transform(linha.begin(), linha.end(), linha.begin(), ::toupper);
+        if (linha.empty())
+            continue; // Ignorar linhas vazias
 
-        // Preserva espaços para instruções como COPY ARG1,ARG2
-        if (!linha.empty())
+        // Detectar e organizar seções
+        if (linha == "SECTION TEXT")
         {
-            if (linha.find("SECTIONTEXT") != std::string::npos)
-                secaoTexto += linha + "\n";
-            else if (linha.find("SECTIONDATA") != std::string::npos)
-                secaoDados += linha + "\n";
-            else
-                (secaoDados.empty() ? secaoTexto : secaoDados) += linha + "\n";
+            sectionText += "SECTION TEXT\n";
+            continue;
+        }
+
+        if (linha == "SECTION DATA")
+        {
+            sectionData += "SECTION DATA\n";
+            continue;
+        }
+
+        // Normalizar espaços internos e formatar a linha
+        linha = removeSpaces(linha);
+        linha = superTrim(linha);
+        linha = upperCase(linha); // Converte para caixa alta
+
+        // Verificar se é um rótulo sozinho
+        if (linha.back() == ':' && linha.find(' ') == std::string::npos)
+        {
+            labelPendente = linha; // Armazena o rótulo para combinar com a próxima linha
+            continue;
+        }
+
+        // Combinar rótulo pendente com a instrução
+        if (!labelPendente.empty())
+        {
+            linha = labelPendente + " " + linha;
+            labelPendente = "";
+        }
+
+        // Adicionar à seção apropriada
+        if (sectionData.empty())
+        {
+            sectionText += linha + "\n";
+        }
+        else
+        {
+            sectionData += linha + "\n";
         }
     }
 
-    arquivoPre << secaoTexto << secaoDados;
+    // Remove a última nova linha desnecessária em sectionData
+    if (!sectionData.empty() && sectionData.back() == '\n')
+    {
+        sectionData.pop_back();
+    }
+
+    // Gravar no arquivo pré-processado
+    arquivoPre << sectionText << sectionData;
+
     arquivo.close();
     arquivoPre.close();
+
+    std::cout << "Arquivo pré-processado gerado em: " << arquivoSaida << "\n";
 }
 
 void Montador::montar(const std::string &arquivoPre, const std::string &arquivoObj)
