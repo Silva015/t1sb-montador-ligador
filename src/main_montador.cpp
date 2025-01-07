@@ -42,6 +42,12 @@ int main(int argc, char *argv[])
     {
         montador.executar(arquivoEntrada, "obj");
     }
+    else if (arquivoEntrada.rfind(".txt") == arquivoEntrada.length() - 4)
+    {
+        std::cerr << "Erro: arquivos .txt não podem ser processados pelo montador.\n";
+        return 1;
+    }
+
     else
     {
         std::cerr << "Erro: extensão do arquivo não reconhecida. Use .asm ou .pre.\n";

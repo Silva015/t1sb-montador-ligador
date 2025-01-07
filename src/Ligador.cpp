@@ -63,6 +63,13 @@ void Ligador::lerTabelas(std::ifstream &arquivo, std::vector<TabelaUso> &tabelaU
 // Função principal do ligador
 void Ligador::executar(const std::string &arquivo1, const std::string &arquivo2, const std::string &arquivoSaida)
 {
+    if (arquivo1.substr(arquivo1.rfind(".")) == ".txt" ||
+        (!arquivo2.empty() && arquivo2.substr(arquivo2.rfind(".")) == ".txt"))
+    {
+        std::cerr << "Erro: arquivos .txt não podem ser processados pelo ligador.\n";
+        return;
+    }
+
     std::ifstream arq1(arquivo1), arq2;
     std::ofstream saida(arquivoSaida);
 

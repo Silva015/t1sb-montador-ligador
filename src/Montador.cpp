@@ -199,8 +199,96 @@ void Montador::preProcessar(const std::string &arquivoEntrada, const std::string
 void Montador::montar(const std::string &arquivoPre, const std::string &arquivoObj)
 {
     std::unordered_map<std::string, int> tabelaSimbolos;
+
+    // Primeira passagem
     primeiraPassagem(arquivoPre, tabelaSimbolos);
-    segundaPassagem(arquivoPre, arquivoObj, tabelaSimbolos);
+
+    // Verifica se BEGIN e END estão presentes
+    std::ifstream arquivo(arquivoPre);
+    bool possuiBeginEnd = false;
+    std::string linha;
+    while (std::getline(arquivo, linha))
+    {
+        if (linha.find("BEGIN") != std::string::npos || linha.find("END") != std::string::npos)
+        {
+            possuiBeginEnd = true;
+            break;
+        }
+    }
+    arquivo.close();
+
+    if (possuiBeginEnd)
+    {
+        // Segunda passagem para gerar o .obj
+        segundaPassagem(arquivoPre, arquivoObj, tabelaSimbolos);
+    }
+    else
+    {
+        // Gera o .txt com o código montado
+        std::ifstream entrada(arquivoPre);
+        std::string arquivoTxt = arquivoObj.substr(0, arquivoObj.rfind(".")) + ".txt";
+        std::ofstream saida(arquivoTxt);
+        if (!entrada.is_open() || !saida.is_open())
+        {
+            std::cerr << "Erro ao abrir arquivos.\n";
+            return;
+        }
+
+        std::ostringstream codigoMontado;
+        while (std::getline(entrada, linha))
+        {
+            std::istringstream iss(linha);
+            std::string rotulo, instrucao, operandos;
+
+            // Processa rótulo e instrução
+            iss >> rotulo;
+            if (!rotulo.empty() && rotulo.back() == ':')
+            {
+                iss >> instrucao;
+            }
+            else
+            {
+                instrucao = rotulo;
+            }
+
+            // Adiciona opcode e operandos
+            if (tabelaInstrucoes.find(instrucao) != tabelaInstrucoes.end())
+            {
+                const auto &instrucaoInfo = tabelaInstrucoes[instrucao];
+                codigoMontado << instrucaoInfo.opcode << " ";
+
+                // Processa operandos
+                while (std::getline(iss, operandos, ','))
+                {
+                    operandos = trim(operandos);
+                    if (tabelaSimbolos.find(operandos) != tabelaSimbolos.end())
+                    {
+                        codigoMontado << tabelaSimbolos[operandos] << " ";
+                    }
+                    else
+                    {
+                        reportarErro("Símbolo não definido: " + operandos, 0);
+                    }
+                }
+            }
+            else if (instrucao == "CONST")
+            {
+                iss >> operandos;
+                codigoMontado << operandos << " ";
+            }
+            else if (instrucao == "SPACE")
+            {
+                codigoMontado << "0 ";
+            }
+        }
+
+        // Escreve o código montado no .txt
+        saida << codigoMontado.str() << "\n";
+        entrada.close();
+        saida.close();
+
+        std::cout << "Arquivo montado gerado em: " << arquivoTxt << "\n";
+    }
 }
 
 void Montador::primeiraPassagem(const std::string &arquivoPre, std::unordered_map<std::string, int> &tabelaSimbolos)
