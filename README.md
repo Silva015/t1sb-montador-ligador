@@ -1,4 +1,3 @@
-Aqui está a prévia do README no formato Markdown renderizado como seria exibido, por exemplo, no GitHub:
 # [Repositório no GitHub](https://github.com/Silva015/t1sb-montador-ligador)
 
 ## Montador e Ligador para Linguagem Assembly
