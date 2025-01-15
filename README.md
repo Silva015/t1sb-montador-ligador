@@ -1,31 +1,27 @@
 # [Repositório no GitHub](https://github.com/Silva015/t1sb-montador-ligador)
 
-# Montador e Ligador para Linguagem Assembly
+## Montador e Ligador para Linguagem Assembly
 
-## Descrição Geral
+### Descrição Geral
 
-Este projeto implementa um **Montador** e um **Ligador** para uma linguagem Assembly inventada, conforme especificado no Trabalho Prático 1 de Software Básico.
+Este projeto implementa um Montador e um Ligador para uma linguagem Assembly inventada, conforme especificado no Trabalho Prático 1 de Software Básico.
 
-- O **Montador** realiza a montagem de programas Assembly em dois modos:
-  - **Pré-processamento:** Gera um arquivo `.pre` a partir de um código Assembly `.asm`.
-  - **Montagem:** Gera um arquivo `.obj` a partir de um código pré-processado `.pre`.
-- O **Ligador** combina dois arquivos `.obj` em um único executável `.e`, resolvendo referências externas e gerando o código final.
+- **Montador** realiza a montagem de programas Assembly em dois modos:
+  - **Pré-processamento**: Gera um arquivo `.pre` a partir de um código Assembly `.asm`.
+  - **Montagem**: Gera um arquivo `.obj` a partir de um código pré-processado `.pre`.
+- **Ligador** combina dois arquivos `.obj` em um único executável `.e`, resolvendo referências externas e gerando o código final (apenas para programas com `BEGIN` e `END`).
 
----
+### Requisitos
 
-## Requisitos
+- Sistema operacional: Linux ou compatível.
+- Compilador g++ com suporte a C++17.
+- Ferramenta Make para gerenciamento de compilação.
 
-- Sistema operacional: **Linux** ou compatível.
-- Compilador **GCC** com suporte a **C++17**.
-- Ferramenta **Make** para gerenciamento de compilação.
-
----
-
-## Compilação
+### Compilação
 
 Para compilar o projeto, utilize o comando:
 
-```bash
+```sh
 make
 ```
 
@@ -33,149 +29,189 @@ Isso gera os executáveis `montador` e `ligador` no diretório raiz.
 
 Para limpar os arquivos compilados, utilize:
 
-```bash
+```sh
 make clean
 ```
 
----
+### Modos de Execução
 
-## Modos de Execução
+#### Montador
 
-### Montador
-
-#### Pré-processamento
+**Pré-processamento**
 
 Para gerar um arquivo pré-processado `.pre` a partir de um código Assembly `.asm`:
 
-```bash
+```sh
 ./montador arquivo.asm
 ```
 
-#### Montagem
+**Montagem**
 
 Para gerar um arquivo objeto `.obj` a partir de um código pré-processado `.pre`:
 
-```bash
+```sh
 ./montador arquivo.pre
 ```
 
-### Ligador
+#### Ligador
 
-Para combinar dois arquivos objeto `.obj` e gerar um executável `.e`:
+Para combinar dois arquivos objeto `.obj` e gerar um executável `.e` (apenas para códigos com `BEGIN` e `END`):
 
-```bash
+```sh
 ./ligador arquivo1.obj arquivo2.obj
 ```
 
 O executável gerado terá o nome `arquivo1.e`.
 
----
+### Exemplos Práticos
 
-## Estrutura dos Arquivos
+#### Caso 1: Código sem `BEGIN` e `END`
 
-### `.asm` - Código Assembly
+**Código Fonte (codigo.asm)**
 
-- **Seções:**
-  - `SECTION TEXT`: Contém o código executável.
-  - `SECTION DATA`: Contém os dados necessários.
-- **Diretivas Suportadas:**
-  - `PUBLIC`: Exporta símbolos para outros módulos.
-  - `EXTERN`: Importa símbolos de outros módulos.
-  - `CONST`: Define um valor constante.
-  - `SPACE`: Reserva espaço de memória.
-- **Instruções Suportadas:**
-  - Aritméticas: `ADD`, `SUB`, `MULT`, `DIV`.
-  - Saltos: `JMP`, `JMPP`, `JMPN`, `JMPZ`.
-  - Entrada/Saída: `INPUT`, `OUTPUT`.
-  - Controle: `STOP`.
-
-### `.pre` - Código Pré-processado
-
-- Arquivo limpo gerado pelo pré-processador, sem comentários e com a seção `TEXT` antes da seção `DATA`.
-
-### `.obj` - Código Objeto
-
-- Contém:
-  - **Tabela de Uso:** Símbolos externos referenciados.
-  - **Tabela de Definição:** Símbolos públicos definidos no módulo.
-  - **Tabela de Realocação:** Indica posições que precisam de ajustes.
-  - **Código Máquina:** Representação numérica do programa.
-
-### `.e` - Executável
-
-- Arquivo único gerado pelo Ligador contendo o código combinado de dois módulos.
-
----
-
-## Exemplo de Execução
-
-### Código Assembly (`mod1.asm`)
-
-```asm
+```assembly
 SECTION TEXT
-PUBLIC START
-START: ADD VAR1
-JMP END
+ROT: INPUT N1
+COPY N2,N1 ;isso e um comentario
+STOP
 SECTION DATA
-VAR1: CONST 10
-END: STOP
+N1: SPACE
+N2: SPACE
 ```
 
-### Passos
+**Código Pré-processado (codigo.pre)**
 
-1. Pré-processar:
-    ```bash
-    ./montador mod1.asm
-    ```
-    Gera: `mod1.pre`
+```assembly
+SECTION TEXT
+ROT: INPUT N1
+COPY N2, N1
+STOP
+SECTION DATA
+N1: SPACE
+N2: SPACE
+```
 
-2. Montar:
-    ```bash
-    ./montador mod1.pre
-    ```
-    Gera: `mod1.obj`
+**Código Montado (codigo.obj)**
 
-3. Ligar com outro módulo (`mod2.obj`):
-    ```bash
-    ./ligador mod1.obj mod2.obj
-    ```
-    Gera: `mod1.e`
+```
+12 6 9 7 6 14 0 0
+```
 
----
+Códigos que não possuem as diretivas `BEGIN` e `END` não podem ser ligados, então seu último estágio é o `.obj`.
 
-## Detecção de Erros
+#### Caso 2: Código com `BEGIN` e `END` (Ligação Possível)
 
-O programa detecta os seguintes erros:
+**Módulo A (mod1.asm)**
 
-1. **Montador:**
-   - Rótulos redefinidos.
-   - Rótulos ausentes ou inválidos.
-   - Instruções ou diretivas inválidas.
-   - Número incorreto de operandos.
+```assembly
+;Código fonte do módulo A:
+SECTION TEXT
+MOD_A: BEGIN
+Y: EXTERN
+MOD_B: EXTERN
+PUBLIC VAL
+PUBLIC L1
+INPUT Y
+LOAD VAL
+ADD Y
+STORE Y + 2
+JMPP MOD_B
+L1: STOP
+END
+SECTION DATA
+VAL: CONST 5
+```
 
-2. **Ligador:**
-   - Símbolos externos não resolvidos.
-   - Tabelas de uso ou definições mal formatadas.
+**Código Pré-processado (mod1.pre)**
 
----
+```assembly
+SECTION TEXT
+MOD_A: BEGIN
+Y: EXTERN
+MOD_B: EXTERN
+PUBLIC VAL
+PUBLIC L1
+INPUT Y
+LOAD VAL
+ADD Y
+STORE Y + 2
+JMPP MOD_B
+L1: STOP
+END
+SECTION DATA
+VAL: CONST 5
+```
 
-## Contato
+**Código Montado (mod1.obj)**
 
-- **Aluno:** Arthur Silva Carneiro  
-- **Matrícula:** 202006321  
-- **Email:** tutuscarneiro@gmail.com  
+```
+D, VAL 11
+D, L1 10
+D, MOD_A 0
+U, MOD_B 9
+U, Y 1
+U, Y 5
+U, Y 7
+R, 0 1 0 1 0 1 0 1 0 1 0 0 
+12 0 10 11 1 0 11 2 7 0 14 5
+```
 
----
+**Módulo B (mod2.asm)**
 
-### Especificações Atendidas
+```assembly
+;Código fonte do módulo B:
+SECTION TEXT
+MOD_B: BEGIN
+VAL: EXTERN
+L1: EXTERN
+PUBLIC Y
+PUBLIC MOD_B
+OUTPUT Y
+OUTPUT VAL
+OUTPUT Y + 2
+JMP L1
+END
+SECTION DATA
+Y: SPACE 3
+```
 
-1. **Montador:**
-   - Aceita **maiúsculas e minúsculas**.
-   - Remove **comentários** e **espaços desnecessários**.
-   - Suporta instruções e diretivas conforme especificado.
+**Código Pré-processado (mod2.pre)**
 
-2. **Ligador:**
-   - Suporta até dois módulos.
-   - Gera um executável compatível com o simulador.
+```assembly
+SECTION TEXT
+MOD_B: BEGIN
+VAL: EXTERN
+L1: EXTERN
+PUBLIC Y
+PUBLIC MOD_B
+OUTPUT Y
+OUTPUT VAL
+OUTPUT Y + 2
+JMP L1
+END
+SECTION DATA
+Y: SPACE 3
+```
 
-**O projeto foi testado e está funcional conforme os exemplos fornecidos.**
+**Código Montado (mod2.obj)**
+
+```
+D, Y 8
+D, MOD_B 0
+U, L1 7
+U, VAL 3
+R, 0 1 0 1 0 1 0 1 0 0 0 
+13 8 13 0 13 10 5 0 0 0 0
+```
+
+**Código Ligado (mod1.e)**
+
+Após ligar `mod1.obj` e `mod2.obj`, o código executável gerado é:
+
+```
+12 20 10 11 1 20 11 20 7 12 14 5 13 20 13 23 13 22 5 22 0 0 0
+```
+
+- **Aluno**: Arthur Silva Carneiro
+- **Matrícula**: 202006321
+- **Email**: tutuscarneiro@gmail.com

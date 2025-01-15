@@ -192,8 +192,6 @@ void Montador::preProcessar(const std::string &arquivoEntrada, const std::string
 
     arquivo.close();
     arquivoPre.close();
-
-    std::cout << "Arquivo pré-processado gerado em: " << arquivoSaida << "\n";
 }
 
 void Montador::montar(const std::string &arquivoPre, const std::string &arquivoObj)
@@ -224,13 +222,18 @@ void Montador::montar(const std::string &arquivoPre, const std::string &arquivoO
     }
     else
     {
-        // Gera o .txt com o código montado
+        // Gera o .obj com o código montado
         std::ifstream entrada(arquivoPre);
-        std::string arquivoTxt = arquivoObj.substr(0, arquivoObj.rfind(".")) + ".txt";
-        std::ofstream saida(arquivoTxt);
-        if (!entrada.is_open() || !saida.is_open())
+        if (!entrada.is_open())
         {
-            std::cerr << "Erro ao abrir arquivos.\n";
+            std::cerr << "Erro ao abrir arquivo de entrada.\n";
+            return;
+        }
+
+        std::ofstream saida(arquivoObj);
+        if (!saida.is_open())
+        {
+            std::cerr << "Erro ao abrir arquivo de saída.\n";
             return;
         }
 
@@ -282,12 +285,10 @@ void Montador::montar(const std::string &arquivoPre, const std::string &arquivoO
             }
         }
 
-        // Escreve o código montado no .txt
+        // Escreve o código montado no .obj
         saida << codigoMontado.str() << "\n";
         entrada.close();
         saida.close();
-
-        std::cout << "Arquivo montado gerado em: " << arquivoTxt << "\n";
     }
 }
 
