@@ -212,33 +212,6 @@ Após ligar `mod1.obj` e `mod2.obj`, o código executável gerado é:
 12 20 10 11 1 20 11 20 7 12 14 5 13 20 13 23 13 22 5 22 0 0 0
 ```
 
-### Detecção de Erros
-
-O programa detecta os seguintes erros:
-
-1. **Montador**:
-   - Rótulos redefinidos.
-   - Rótulos ausentes ou inválidos.
-   - Instruções ou diretivas inválidas.
-   - Número incorreto de operandos.
-2. **Ligador**:
-   - Símbolos externos não resolvidos.
-   - Tabelas de uso ou definições mal formatadas.
-
-### Contato
-
 - **Aluno**: Arthur Silva Carneiro
 - **Matrícula**: 202006321
 - **Email**: tutuscarneiro@gmail.com
-
-### Especificações Atendidas
-
-1. **Montador**:
-   - Aceita maiúsculas e minúsculas.
-   - Remove comentários e espaços desnecessários.
-   - Suporta instruções e diretivas conforme especificado.
-2. **Ligador**:
-   - Suporta até dois módulos.
-   - Gera um executável compatível com o simulador.
-
-O projeto foi testado e está funcional conforme os exemplos fornecidos.
