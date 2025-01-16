@@ -127,13 +127,13 @@ void Ligador::executar(const std::string &arquivo1, const std::string &arquivo2,
     auto corrigirModulo = [&](std::vector<int> &codigo, std::vector<TabelaUso> &tabelaUso,
                               std::vector<int> &tabelaRealocacao, int fatorCorrecao)
     {
-        // Corrige endereços das entradas na tabela de uso
         for (const auto &uso : tabelaUso)
         {
             if (tabelaGlobalDefinicoes.count(uso.simbolo))
             {
-                // Substitui o placeholder pelo endereço global do símbolo
-                codigo[uso.endereco] = tabelaGlobalDefinicoes[uso.simbolo];
+                // Preserva o deslocamento já presente no código
+                int enderecoGlobal = tabelaGlobalDefinicoes[uso.simbolo];
+                codigo[uso.endereco] += enderecoGlobal; // Soma endereço global
             }
             else
             {
@@ -142,12 +142,13 @@ void Ligador::executar(const std::string &arquivo1, const std::string &arquivo2,
             }
         }
 
-        // Corrige os endereços realocados
+        // Corrige os endereços relativos (realocação)
         for (size_t i = 0; i < tabelaRealocacao.size(); ++i)
         {
             if (tabelaRealocacao[i] == 1)
             {
-                codigo[i] += fatorCorrecao; // Realoca apenas quando indicado
+                // Adiciona fator de correção apenas aos endereços relativos
+                codigo[i] += fatorCorrecao;
             }
         }
     };
