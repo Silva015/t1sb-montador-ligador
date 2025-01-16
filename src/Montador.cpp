@@ -369,12 +369,10 @@ void Montador::montar(const std::string &arquivoPre, const std::string &arquivoO
             iss >> rotulo;
             if (!rotulo.empty() && rotulo.back() == ':')
             {
-                // Lê a próxima palavra como instrução
                 iss >> instrucao;
             }
             else
             {
-                // Caso contrário, a "instrução" é esse token
                 instrucao = rotulo;
             }
 
@@ -393,18 +391,30 @@ void Montador::montar(const std::string &arquivoPre, const std::string &arquivoO
                 }
 
                 // Verifica número de operandos
-                // (Se preferir, pode usar info.numOperandos direto)
                 if ((int)listaOperandos.size() != info.numOperandos)
                 {
                     reportarErro("Número de operandos incorreto para a instrução " + instrucao, 0);
                 }
 
-                // Para cada operando, converte para posição
+                // Para cada operando, converte para posição (com suporte a N3+1)
                 for (auto &op : listaOperandos)
                 {
+                    bool temMais = (op.find('+') != std::string::npos);
+                    int desloc = 0;
+                    if (temMais)
+                    {
+                        size_t plusPos = op.find('+');
+                        std::string deslocStr = op.substr(plusPos + 1);
+                        desloc = std::stoi(deslocStr);
+                        // "op" passa a ser só "N3"
+                        op = op.substr(0, plusPos);
+                    }
+
                     if (tabelaSimbolos.find(op) != tabelaSimbolos.end())
                     {
-                        codigoMontado << tabelaSimbolos[op] << " ";
+                        // Soma o deslocamento
+                        int baseAddr = tabelaSimbolos[op];
+                        codigoMontado << (baseAddr + desloc) << " ";
                     }
                     else
                     {
@@ -425,8 +435,23 @@ void Montador::montar(const std::string &arquivoPre, const std::string &arquivoO
             }
             else if (instrucao == "SPACE")
             {
-                // Por simplicidade, assume SPACE 1
-                codigoMontado << "0 ";
+                // Verifica se há argumento (ex: SPACE 2)
+                std::string argSpace;
+                // Tente ler um possível valor depois de SPACE
+                if (iss >> argSpace)
+                {
+                    int n = std::stoi(argSpace); // Converta
+                    // Gere n vezes "0 "
+                    for (int i = 0; i < n; i++)
+                    {
+                        codigoMontado << "0 ";
+                    }
+                }
+                else
+                {
+                    // Se não houver argumento, gere apenas 1 espaço
+                    codigoMontado << "0 ";
+                }
             }
             // Ignora outras diretivas (BEGIN, END, etc.) aqui,
             // pois neste modo elas não são usadas.
@@ -526,9 +551,21 @@ void Montador::primeiraPassagem(const std::string &arquivoPre, std::unordered_ma
         // Se é diretiva
         else if (tabelaDiretivas.count(instrucao))
         {
-            if (instrucao == "SPACE" || instrucao == "CONST")
+            if (instrucao == "CONST")
             {
                 contadorPosicao++; // Cada um ocupa 1 palavra
+            }
+            else if (instrucao == "SPACE")
+            {
+                std::string argumento; // <--- Adicione esta linha
+                int num = 1;           // se não tiver argumento, default = 1
+                if (iss >> argumento)
+                {
+                    // converta para int
+                    num = std::stoi(argumento);
+                }
+                // Some esse valor ao contadorPosicao
+                contadorPosicao += num;
             }
             // Seção TEXT ou DATA não incrementa
         }
