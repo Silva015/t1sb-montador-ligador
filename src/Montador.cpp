@@ -8,23 +8,130 @@
 #include <regex>
 #include <cctype>
 
+// ============================================================================
+// Estrutura de informações de instrução
+// Agora armazenamos também o número de operandos esperado (numOperandos).
+// ----------------------------------------------------------------------------
+struct InstrucaoInfo
+{
+    int opcode;
+    int tamanho;      // Quantas palavras de memória esta instrução ocupa
+    int numOperandos; // Quantos operandos a instrução deve receber
+};
+
+// ============================================================================
+// Funções auxiliares para validação
+// ----------------------------------------------------------------------------
+
+// Verifica se um rótulo (label) é válido conforme as regras:
+// 1) Não pode começar com número
+// 2) Pode ter letras, dígitos ou underscore
+// 3) Pelo menos 1 caractere
+bool Montador::rotuloValido(const std::string &rotulo)
+{
+    if (rotulo.empty())
+        return false;
+
+    // Primeiro caractere deve ser letra ou underscore
+    if (!std::isalpha(rotulo[0]) && rotulo[0] != '_')
+        return false;
+
+    // Demais podem ser alfanuméricos ou underscore
+    for (size_t i = 1; i < rotulo.size(); i++)
+    {
+        if (!std::isalnum(rotulo[i]) && rotulo[i] != '_')
+            return false;
+    }
+    return true;
+}
+
+// Verifica se um valor de CONST é válido (aceita decimal +/-, ou hexa 0x...).
+bool Montador::valorConstValido(const std::string &str)
+{
+    std::string s = trim(str);
+    if (s.empty())
+        return false;
+
+    // Remove o sinal '-' caso exista,
+    // sem salvar em nenhuma variável
+    if (s[0] == '-')
+    {
+        s.erase(0, 1);
+        if (s.empty())
+            return false;
+    }
+
+    // Se começa com "0x" ou "0X", deve ser hex
+    if (s.size() >= 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X'))
+    {
+        s.erase(0, 2);
+        if (s.empty())
+            return false;
+        for (char c : s)
+        {
+            if (!std::isxdigit(c))
+                return false;
+        }
+        return true; // valor hexa válido
+    }
+    else
+    {
+        // Verifica se é decimal (só dígitos)
+        for (char c : s)
+        {
+            if (!std::isdigit(c))
+                return false;
+        }
+        return true; // valor decimal válido
+    }
+}
+
+// Converte string (que já validamos como decimal ou hex) para inteiro.
+int Montador::converterStringParaInt(const std::string &str)
+{
+    std::string s = trim(str);
+    bool negative = false;
+    if (!s.empty() && s[0] == '-')
+    {
+        negative = true;
+        s.erase(0, 1);
+    }
+
+    int base = 10;
+    // Se começa com 0x/0X, converte como hexa
+    if (s.size() >= 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X'))
+    {
+        base = 16;
+        s.erase(0, 2);
+    }
+
+    int valor = std::stoi(s, nullptr, base);
+    return (negative ? -valor : valor);
+}
+
+// ============================================================================
+// Inicialização das tabelas de instruções e diretivas
+// Agora incluindo o número de operandos esperado no construtor da instruçãoInfo.
+// ----------------------------------------------------------------------------
 void Montador::inicializarTabelaInstrucoes()
 {
+    //                  nome       { opcode, tamanhoMem, numOperandos }
     tabelaInstrucoes = {
-        {"ADD", {1, 2}},
-        {"SUB", {2, 2}},
-        {"MUL", {3, 2}},
-        {"DIV", {4, 2}},
-        {"JMP", {5, 2}},
-        {"JMPN", {6, 2}},
-        {"JMPP", {7, 2}},
-        {"JMPZ", {8, 2}},
-        {"COPY", {9, 3}},
-        {"LOAD", {10, 2}},
-        {"STORE", {11, 2}},
-        {"INPUT", {12, 2}},
-        {"OUTPUT", {13, 2}},
-        {"STOP", {14, 1}}};
+        {"ADD", {1, 2, 1}},
+        {"SUB", {2, 2, 1}},
+        {"MUL", {3, 2, 1}},
+        {"DIV", {4, 2, 1}},
+        {"JMP", {5, 2, 1}},
+        {"JMPN", {6, 2, 1}},
+        {"JMPP", {7, 2, 1}},
+        {"JMPZ", {8, 2, 1}},
+        {"COPY", {9, 3, 2}}, // COPY ocupa 3 palavras (opcode + 2 operandos)
+        {"LOAD", {10, 2, 1}},
+        {"STORE", {11, 2, 1}},
+        {"INPUT", {12, 2, 1}},
+        {"OUTPUT", {13, 2, 1}},
+        {"STOP", {14, 1, 0}} // STOP não tem operandos
+    };
 }
 
 void Montador::inicializarTabelaDiretivas()
@@ -45,6 +152,9 @@ Montador::Montador() noexcept
     inicializarTabelaDiretivas();
 }
 
+// ============================================================================
+// Função principal de execução do Montador
+// ----------------------------------------------------------------------------
 void Montador::executar(const std::string &arquivoEntrada, const std::string &modo)
 {
     if (modo == "pre")
@@ -63,11 +173,18 @@ void Montador::executar(const std::string &arquivoEntrada, const std::string &mo
     }
 }
 
+// ============================================================================
+// Funções utilitárias de manipulação de strings
+// ----------------------------------------------------------------------------
 std::string trim(const std::string &str)
 {
     auto start = str.find_first_not_of(" \t\n\r");
     auto end = str.find_last_not_of(" \t\n\r");
-    return (start == std::string::npos) ? "" : str.substr(start, end - start + 1);
+    if (start == std::string::npos)
+    {
+        return "";
+    }
+    return str.substr(start, end - start + 1);
 }
 
 std::string upperCase(const std::string &str)
@@ -114,6 +231,9 @@ std::vector<std::string> split(const std::string &str, const std::string &delimi
     return tokens;
 }
 
+// ============================================================================
+// Pré-processamento (gera .pre) - remove comentários, normaliza espaços, etc.
+// ----------------------------------------------------------------------------
 void Montador::preProcessar(const std::string &arquivoEntrada, const std::string &arquivoSaida)
 {
     std::ifstream arquivo(arquivoEntrada);
@@ -127,16 +247,15 @@ void Montador::preProcessar(const std::string &arquivoEntrada, const std::string
 
     std::string linha;
     std::string sectionText, sectionData;
-    std::string labelPendente = ""; // Armazena rótulos sozinhos temporariamente
+    std::string labelPendente = "";
 
     while (std::getline(arquivo, linha))
     {
-        // Remove comentários
+        // Remove comentário
         linha = linha.substr(0, linha.find(';'));
-        linha = trim(linha); // Remove espaços extras no início e no fim
-
+        linha = trim(linha);
         if (linha.empty())
-            continue; // Ignorar linhas vazias
+            continue;
 
         // Detectar e organizar seções
         if (linha == "SECTION TEXT")
@@ -144,33 +263,33 @@ void Montador::preProcessar(const std::string &arquivoEntrada, const std::string
             sectionText += "SECTION TEXT\n";
             continue;
         }
-
         if (linha == "SECTION DATA")
         {
             sectionData += "SECTION DATA\n";
             continue;
         }
 
-        // Normalizar espaços internos e formatar a linha
+        // Normaliza e converte para maiúsculas
         linha = removeSpaces(linha);
         linha = superTrim(linha);
-        linha = upperCase(linha); // Converte para caixa alta
+        linha = upperCase(linha);
 
-        // Verificar se é um rótulo sozinho
-        if (linha.back() == ':' && linha.find(' ') == std::string::npos)
+        // Verifica se é só um rótulo
+        if (!linha.empty() && linha.back() == ':' && linha.find(' ') == std::string::npos)
         {
-            labelPendente = linha; // Armazena o rótulo para combinar com a próxima linha
+            // Se não tem espaço e termina em ':', é um rótulo sozinho
+            labelPendente = linha;
             continue;
         }
 
-        // Combinar rótulo pendente com a instrução
+        // Se havia um rótulo pendente, cola com a instrução
         if (!labelPendente.empty())
         {
             linha = labelPendente + " " + linha;
-            labelPendente = "";
+            labelPendente.clear();
         }
 
-        // Adicionar à seção apropriada
+        // Adiciona à seção apropriada
         if (sectionData.empty())
         {
             sectionText += linha + "\n";
@@ -181,19 +300,22 @@ void Montador::preProcessar(const std::string &arquivoEntrada, const std::string
         }
     }
 
-    // Remove a última nova linha desnecessária em sectionData
+    // Remove quebra de linha extra no final da seção DATA
     if (!sectionData.empty() && sectionData.back() == '\n')
     {
         sectionData.pop_back();
     }
 
-    // Gravar no arquivo pré-processado
+    // Escreve no arquivo .pre
     arquivoPre << sectionText << sectionData;
 
     arquivo.close();
     arquivoPre.close();
 }
 
+// ============================================================================
+// Montar (chama primeira e segunda passagem, ou gera .obj direto se não tiver BEGIN/END)
+// ----------------------------------------------------------------------------
 void Montador::montar(const std::string &arquivoPre, const std::string &arquivoObj)
 {
     std::unordered_map<std::string, int> tabelaSimbolos;
@@ -215,14 +337,14 @@ void Montador::montar(const std::string &arquivoPre, const std::string &arquivoO
     }
     arquivo.close();
 
+    // Se tiver BEGIN/END, gera objeto com as infos de ligacao
     if (possuiBeginEnd)
     {
-        // Segunda passagem para gerar o .obj
         segundaPassagem(arquivoPre, arquivoObj, tabelaSimbolos);
     }
     else
     {
-        // Gera o .obj com o código montado
+        // Gera .obj simples (sem infos de ligacao)
         std::ifstream entrada(arquivoPre);
         if (!entrada.is_open())
         {
@@ -243,55 +365,82 @@ void Montador::montar(const std::string &arquivoPre, const std::string &arquivoO
             std::istringstream iss(linha);
             std::string rotulo, instrucao, operandos;
 
-            // Processa rótulo e instrução
+            // Se há rótulo
             iss >> rotulo;
             if (!rotulo.empty() && rotulo.back() == ':')
             {
+                // Lê a próxima palavra como instrução
                 iss >> instrucao;
             }
             else
             {
+                // Caso contrário, a "instrução" é esse token
                 instrucao = rotulo;
             }
 
-            // Adiciona opcode e operandos
+            // Se a instrução faz parte da tabela de instruções
             if (tabelaInstrucoes.find(instrucao) != tabelaInstrucoes.end())
             {
-                const auto &instrucaoInfo = tabelaInstrucoes[instrucao];
-                codigoMontado << instrucaoInfo.opcode << " ";
+                const auto &info = tabelaInstrucoes[instrucao];
+                codigoMontado << info.opcode << " ";
 
-                // Processa operandos
+                // Coleta operandos
+                std::vector<std::string> listaOperandos;
                 while (std::getline(iss, operandos, ','))
                 {
                     operandos = trim(operandos);
-                    if (tabelaSimbolos.find(operandos) != tabelaSimbolos.end())
+                    listaOperandos.push_back(operandos);
+                }
+
+                // Verifica número de operandos
+                // (Se preferir, pode usar info.numOperandos direto)
+                if ((int)listaOperandos.size() != info.numOperandos)
+                {
+                    reportarErro("Número de operandos incorreto para a instrução " + instrucao, 0);
+                }
+
+                // Para cada operando, converte para posição
+                for (auto &op : listaOperandos)
+                {
+                    if (tabelaSimbolos.find(op) != tabelaSimbolos.end())
                     {
-                        codigoMontado << tabelaSimbolos[operandos] << " ";
+                        codigoMontado << tabelaSimbolos[op] << " ";
                     }
                     else
                     {
-                        reportarErro("Símbolo não definido: " + operandos, 0);
+                        reportarErro("Símbolo não definido: " + op, 0);
                     }
                 }
             }
             else if (instrucao == "CONST")
             {
                 iss >> operandos;
-                codigoMontado << operandos << " ";
+                // Valida e converte
+                if (!valorConstValido(operandos))
+                {
+                    reportarErro("Valor inválido em CONST: " + operandos, 0);
+                }
+                int val = converterStringParaInt(operandos);
+                codigoMontado << val << " ";
             }
             else if (instrucao == "SPACE")
             {
+                // Por simplicidade, assume SPACE 1
                 codigoMontado << "0 ";
             }
+            // Ignora outras diretivas (BEGIN, END, etc.) aqui,
+            // pois neste modo elas não são usadas.
         }
 
-        // Escreve o código montado no .obj
         saida << codigoMontado.str() << "\n";
         entrada.close();
         saida.close();
     }
 }
 
+// ============================================================================
+// Primeira Passagem - constroi tabela de símbolos e detecta erros iniciais
+// ----------------------------------------------------------------------------
 void Montador::primeiraPassagem(const std::string &arquivoPre, std::unordered_map<std::string, int> &tabelaSimbolos)
 {
     std::ifstream arquivo(arquivoPre);
@@ -307,81 +456,94 @@ void Montador::primeiraPassagem(const std::string &arquivoPre, std::unordered_ma
     while (std::getline(arquivo, linha))
     {
         std::istringstream iss(linha);
-        std::string rotulo, instrucao;
+        std::string maybeRotulo, instrucao;
+        iss >> maybeRotulo;
 
-        // Verifica e separa rótulo, se houver
-        iss >> rotulo;
-        if (!rotulo.empty() && rotulo.back() == ':')
+        // Se termina com ':', é um rótulo
+        if (!maybeRotulo.empty() && maybeRotulo.back() == ':')
         {
-            rotulo.pop_back(); // Remove o ':' do rótulo
-            iss >> instrucao;  // Lê a instrução após o rótulo
+            maybeRotulo.pop_back(); // remove ':'
 
+            // Valida rótulo
+            if (!rotuloValido(maybeRotulo))
+            {
+                reportarErro("Rótulo inválido: " + maybeRotulo, linhaAtual);
+            }
+
+            // Verifica redefinição
+            if (tabelaSimbolos.count(maybeRotulo))
+            {
+                reportarErro("Rótulo redefinido: " + maybeRotulo, linhaAtual);
+            }
+
+            // Lê próxima token como instrucao
+            iss >> instrucao;
+
+            // Se for EXTERN
             if (instrucao == "EXTERN")
             {
-                // Se EXTERN, registra o rótulo como externo
-                if (tabelaSimbolos.count(rotulo))
-                {
-                    reportarErro("Rótulo redefinido em EXTERN: " + rotulo, linhaAtual);
-                }
-                tabelaSimbolos[rotulo] = -1; // Marca como externo
+                // Marca como externo
+                tabelaSimbolos[maybeRotulo] = -1;
                 linhaAtual++;
                 continue;
             }
-
-            // Se não for EXTERN, registra o rótulo normalmente
-            if (tabelaSimbolos.count(rotulo))
+            else
             {
-                reportarErro("Rótulo redefinido: " + rotulo, linhaAtual);
+                // Armazena rótulo com posição
+                tabelaSimbolos[maybeRotulo] = contadorPosicao;
             }
-            tabelaSimbolos[rotulo] = contadorPosicao;
         }
         else
         {
-            instrucao = rotulo;
+            // Se não é rótulo, a "instrucao" é esse token
+            instrucao = maybeRotulo;
         }
 
-        // Tratamento para EXTERN sem rótulo
+        // Se for EXTERN sem rótulo
         if (instrucao == "EXTERN")
         {
-            std::string argumentoLabel;
-            if (!(iss >> argumentoLabel))
+            // Espera um rótulo como argumento
+            std::string argumento;
+            if (!(iss >> argumento))
             {
-                reportarErro("Diretiva EXTERN requer um argumento (LABEL).", linhaAtual);
+                reportarErro("Diretiva EXTERN requer um rótulo.", linhaAtual);
             }
-
-            if (tabelaSimbolos.count(argumentoLabel))
+            if (tabelaSimbolos.count(argumento))
             {
-                reportarErro("Rótulo redefinido em EXTERN: " + argumentoLabel, linhaAtual);
+                reportarErro("Rótulo redefinido em EXTERN: " + argumento, linhaAtual);
             }
-
-            // Registra o argumento como símbolo externo
-            tabelaSimbolos[argumentoLabel] = -1; // Marca como externo
+            tabelaSimbolos[argumento] = -1;
             linhaAtual++;
             continue;
         }
 
-        // Processamento das demais instruções e diretivas
+        // Se é instrução
         if (tabelaInstrucoes.count(instrucao))
         {
+            // Incrementa PC pelo tamanho da instrução
             contadorPosicao += tabelaInstrucoes[instrucao].tamanho;
         }
+        // Se é diretiva
         else if (tabelaDiretivas.count(instrucao))
         {
             if (instrucao == "SPACE" || instrucao == "CONST")
             {
-                contadorPosicao++;
+                contadorPosicao++; // Cada um ocupa 1 palavra
             }
+            // Seção TEXT ou DATA não incrementa
         }
         else if (instrucao == "SECTION")
         {
             std::string argumentoSection;
-            if (!(iss >> argumentoSection) || (argumentoSection != "TEXT" && argumentoSection != "DATA"))
+            if (!(iss >> argumentoSection) ||
+                (argumentoSection != "TEXT" && argumentoSection != "DATA"))
             {
                 reportarErro("Diretiva SECTION inválida.", linhaAtual);
             }
         }
-        else
+        else if (!instrucao.empty())
         {
+            // Instrução ou diretiva inválida
             reportarErro("Instrução ou diretiva inválida: " + instrucao, linhaAtual);
         }
 
@@ -391,7 +553,12 @@ void Montador::primeiraPassagem(const std::string &arquivoPre, std::unordered_ma
     arquivo.close();
 }
 
-void Montador::segundaPassagem(const std::string &arquivoPre, const std::string &arquivoObj, const std::unordered_map<std::string, int> &tabelaSimbolos)
+// ============================================================================
+// Segunda Passagem - gera .obj completo (tabela de uso, defs, realocação, etc.)
+// ----------------------------------------------------------------------------
+void Montador::segundaPassagem(const std::string &arquivoPre,
+                               const std::string &arquivoObj,
+                               const std::unordered_map<std::string, int> &tabelaSimbolos)
 {
     std::ifstream arquivo(arquivoPre);
     std::ofstream arquivoSaida(arquivoObj);
@@ -402,50 +569,53 @@ void Montador::segundaPassagem(const std::string &arquivoPre, const std::string 
         return;
     }
 
-    // Buffers para armazenar diferentes partes do arquivo de saída
+    // Buffers para armazenar o resultado
     std::ostringstream bufferDefinicoes;
-    std::ostringstream bufferCodigoObjeto;
     std::ostringstream bufferTabelaUso;
     std::ostringstream bufferTabelaRealocacao;
+    std::ostringstream bufferCodigoObjeto;
 
-    // Adiciona símbolos públicos à tabela de definições no buffer
+    // Adiciona símbolos (locais) na tabela de definições
     for (const auto &simbolo : tabelaSimbolos)
     {
-        if (simbolo.second >= 0) // Símbolos definidos localmente
+        if (simbolo.second >= 0) // >=0 => definido localmente
         {
             bufferDefinicoes << "D, " << simbolo.first << " " << simbolo.second << "\n";
         }
     }
 
-    int contadorPosicao = 0; // Contador de posição inicializado
+    int contadorPosicao = 0;
     std::unordered_map<std::string, std::vector<int>> usoSimbolos;
 
     std::string linha;
+    int linhaArq = 1; // Para reportar erros com linha
     while (std::getline(arquivo, linha))
     {
         std::istringstream iss(linha);
-        std::string rotulo, instrucao, operandos;
+        std::string maybeRotulo, instrucao;
+        iss >> maybeRotulo;
 
-        // Verifica e ignora rótulo, se houver
-        iss >> rotulo;
-        if (!rotulo.empty() && rotulo.back() == ':')
+        // Ignora rótulo
+        if (!maybeRotulo.empty() && maybeRotulo.back() == ':')
         {
-            iss >> instrucao; // Lê a instrução após o rótulo
+            iss >> instrucao; // Lê a próxima token como instrucao
         }
         else
         {
-            instrucao = rotulo;
+            instrucao = maybeRotulo;
         }
 
-        // Processa diretivas
+        // Se for diretiva
         if (tabelaDiretivas.find(instrucao) != tabelaDiretivas.end())
         {
             if (instrucao == "SPACE")
             {
+                // Pode ter SPACE n
                 int tamanho = 1;
-                if (iss >> operandos)
+                std::string operand;
+                if (iss >> operand)
                 {
-                    tamanho = std::stoi(operandos);
+                    tamanho = std::stoi(operand);
                 }
                 for (int i = 0; i < tamanho; i++)
                 {
@@ -456,70 +626,109 @@ void Montador::segundaPassagem(const std::string &arquivoPre, const std::string 
             }
             else if (instrucao == "CONST")
             {
-                if (!(iss >> operandos))
+                std::string valor;
+                if (!(iss >> valor))
                 {
-                    reportarErro("Diretiva CONST requer um valor.", contadorPosicao);
+                    reportarErro("Diretiva CONST requer um valor.", linhaArq);
                 }
-                bufferCodigoObjeto << operandos << " ";
+                // Valida e converte
+                if (!valorConstValido(valor))
+                {
+                    reportarErro("Valor inválido em CONST: " + valor, linhaArq);
+                }
+                int val = converterStringParaInt(valor);
+
+                bufferCodigoObjeto << val << " ";
                 bufferTabelaRealocacao << "0 ";
                 contadorPosicao++;
             }
+            // Outras diretivas (BEGIN, END, EXTERN, PUBLIC) não ocupam espaço
+            linhaArq++;
             continue;
         }
 
-        // Processa instruções
+        // Se for instrução
         if (tabelaInstrucoes.find(instrucao) != tabelaInstrucoes.end())
         {
-            const auto &instrucaoInfo = tabelaInstrucoes[instrucao];
-            bufferCodigoObjeto << instrucaoInfo.opcode << " "; // Escreve opcode
-            bufferTabelaRealocacao << "0 ";                    // Opcode não requer realocação
-            contadorPosicao++;                                 // Incrementa posição para o opcode
+            const auto &info = tabelaInstrucoes.at(instrucao);
+            // Escreve opcode
+            bufferCodigoObjeto << info.opcode << " ";
+            // Opcode não precisa de realocação
+            bufferTabelaRealocacao << "0 ";
+            contadorPosicao++;
 
-            // Processa operandos
-            while (std::getline(iss, operandos, ','))
+            // Coletar operandos
+            std::string operandStr;
+            std::vector<std::string> listaOperandos;
+            while (std::getline(iss, operandStr, ','))
             {
-                operandos.erase(std::remove(operandos.begin(), operandos.end(), ' '), operandos.end()); // Remove espaços extras
-
-                bool enderecoRelativo = operandos.find('+') != std::string::npos;
-                int deslocamento = 0;
-                if (enderecoRelativo)
+                operandStr.erase(std::remove(operandStr.begin(), operandStr.end(), ' '),
+                                 operandStr.end());
+                if (!operandStr.empty())
                 {
-                    deslocamento = std::stoi(operandos.substr(operandos.find('+') + 1));
-                    operandos = operandos.substr(0, operandos.find('+'));
+                    listaOperandos.push_back(operandStr);
+                }
+            }
+
+            // Verifica número de operandos
+            if ((int)listaOperandos.size() != info.numOperandos)
+            {
+                reportarErro("Número de operandos incorreto para " + instrucao, linhaArq);
+            }
+
+            // Para cada operando
+            for (auto &op : listaOperandos)
+            {
+                bool temMais = (op.find('+') != std::string::npos);
+                int desloc = 0;
+                if (temMais)
+                {
+                    auto plusPos = op.find('+');
+                    std::string deslocStr = op.substr(plusPos + 1);
+                    desloc = std::stoi(deslocStr);
+                    op = op.substr(0, plusPos);
                 }
 
-                if (tabelaSimbolos.find(operandos) == tabelaSimbolos.end())
+                // Verifica se existe na tabela
+                if (tabelaSimbolos.find(op) == tabelaSimbolos.end())
                 {
-                    reportarErro("Símbolo não definido: " + operandos, contadorPosicao);
+                    reportarErro("Símbolo não definido: " + op, linhaArq);
                 }
 
-                int endereco = tabelaSimbolos.at(operandos);
-                if (endereco == -1) // Símbolo externo
+                int ender = tabelaSimbolos.at(op);
+                if (ender == -1)
                 {
-                    usoSimbolos[operandos].push_back(contadorPosicao);
-                    bufferCodigoObjeto << deslocamento << " "; // Placeholder para o ligador, ajustado com deslocamento
-                    bufferTabelaRealocacao << "1 ";            // Requer realocação
+                    // Símbolo externo => gera entrada na tabela de uso
+                    usoSimbolos[op].push_back(contadorPosicao);
+
+                    // No lugar da posição, guardamos apenas o desloc
+                    bufferCodigoObjeto << desloc << " ";
+                    // Requer realocação (1)
+                    bufferTabelaRealocacao << "1 ";
                 }
                 else
                 {
-                    bufferCodigoObjeto << (endereco + deslocamento) << " ";
-                    bufferTabelaRealocacao << "1 "; // Requer realocação
+                    // Símbolo local
+                    bufferCodigoObjeto << (ender + desloc) << " ";
+                    // Requer realocação
+                    bufferTabelaRealocacao << "1 ";
                 }
-                contadorPosicao++; // Incrementa posição para o operando
+                contadorPosicao++;
             }
         }
+        linhaArq++;
     }
 
-    // Gera tabela de uso no buffer
-    for (const auto &[simbolo, enderecos] : usoSimbolos)
+    // Tabela de uso
+    for (auto &uso : usoSimbolos)
     {
-        for (int endereco : enderecos)
+        for (auto &pos : uso.second)
         {
-            bufferTabelaUso << "U, " << simbolo << " " << endereco << "\n";
+            bufferTabelaUso << "U, " << uso.first << " " << pos << "\n";
         }
     }
 
-    // Escreve buffers no arquivo de saída na ordem correta
+    // Escreve no arquivo de saída (ordem: defs, uso, realocação, código)
     arquivoSaida << bufferDefinicoes.str();
     arquivoSaida << bufferTabelaUso.str();
     arquivoSaida << "R, " << bufferTabelaRealocacao.str() << "\n";
@@ -529,9 +738,12 @@ void Montador::segundaPassagem(const std::string &arquivoPre, const std::string 
     arquivoSaida.close();
 }
 
+// ============================================================================
+// Relatar erro e abortar
+// ----------------------------------------------------------------------------
 void Montador::reportarErro(const std::string &mensagem, int linha)
 {
     std::cerr << "Erro na linha " << linha << ": " << mensagem << "\n";
     std::cerr << "Abortando execução...\n";
-    exit(EXIT_FAILURE); // Termina o programa após o erro
+    exit(EXIT_FAILURE);
 }
