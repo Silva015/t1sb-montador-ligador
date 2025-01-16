@@ -606,16 +606,15 @@ void Montador::segundaPassagem(const std::string &arquivoPre,
         return;
     }
 
-    // Buffers para armazenar o resultado
     std::ostringstream bufferDefinicoes;
     std::ostringstream bufferTabelaUso;
     std::ostringstream bufferTabelaRealocacao;
     std::ostringstream bufferCodigoObjeto;
 
-    // Adiciona símbolos (locais) na tabela de definições
+    // Adiciona símbolos locais à tabela de definições
     for (const auto &simbolo : tabelaSimbolos)
     {
-        if (simbolo.second >= 0) // >=0 => definido localmente
+        if (simbolo.second >= 0) // Apenas locais
         {
             bufferDefinicoes << "D, " << simbolo.first << " " << simbolo.second << "\n";
         }
@@ -625,36 +624,34 @@ void Montador::segundaPassagem(const std::string &arquivoPre,
     std::unordered_map<std::string, std::vector<int>> usoSimbolos;
 
     std::string linha;
-    int linhaArq = 1; // Para reportar erros com linha
+    int linhaAtual = 1;
+
     while (std::getline(arquivo, linha))
     {
         std::istringstream iss(linha);
-        std::string maybeRotulo, instrucao;
-        iss >> maybeRotulo;
+        std::string talvezRotulo, instrucao;
 
-        // Ignora rótulo
-        if (!maybeRotulo.empty() && maybeRotulo.back() == ':')
+        iss >> talvezRotulo;
+        if (!talvezRotulo.empty() && talvezRotulo.back() == ':')
         {
-            iss >> instrucao; // Lê a próxima token como instrucao
+            iss >> instrucao; // Rótulo encontrado
         }
         else
         {
-            instrucao = maybeRotulo;
+            instrucao = talvezRotulo;
         }
 
-        // Se for diretiva
-        if (tabelaDiretivas.find(instrucao) != tabelaDiretivas.end())
+        if (tabelaDiretivas.count(instrucao))
         {
             if (instrucao == "SPACE")
             {
-                // Pode ter SPACE n
                 int tamanho = 1;
-                std::string operand;
-                if (iss >> operand)
+                std::string argumento;
+                if (iss >> argumento)
                 {
-                    tamanho = std::stoi(operand);
+                    tamanho = std::stoi(argumento);
                 }
-                for (int i = 0; i < tamanho; i++)
+                for (int i = 0; i < tamanho; ++i)
                 {
                     bufferCodigoObjeto << "0 ";
                     bufferTabelaRealocacao << "0 ";
@@ -666,106 +663,82 @@ void Montador::segundaPassagem(const std::string &arquivoPre,
                 std::string valor;
                 if (!(iss >> valor))
                 {
-                    reportarErro("Diretiva CONST requer um valor.", linhaArq);
+                    reportarErro("CONST requer um valor.", linhaAtual);
                 }
-                // Valida e converte
-                if (!valorConstValido(valor))
-                {
-                    reportarErro("Valor inválido em CONST: " + valor, linhaArq);
-                }
-                int val = converterStringParaInt(valor);
-
-                bufferCodigoObjeto << val << " ";
+                bufferCodigoObjeto << converterStringParaInt(valor) << " ";
                 bufferTabelaRealocacao << "0 ";
                 contadorPosicao++;
             }
-            // Outras diretivas (BEGIN, END, EXTERN, PUBLIC) não ocupam espaço
-            linhaArq++;
+            linhaAtual++;
             continue;
         }
 
-        // Se for instrução
-        if (tabelaInstrucoes.find(instrucao) != tabelaInstrucoes.end())
+        if (tabelaInstrucoes.count(instrucao))
         {
-            const auto &info = tabelaInstrucoes.at(instrucao);
-            // Escreve opcode
-            bufferCodigoObjeto << info.opcode << " ";
-            // Opcode não precisa de realocação
+            const auto &infoInstrucao = tabelaInstrucoes.at(instrucao);
+
+            bufferCodigoObjeto << infoInstrucao.opcode << " ";
             bufferTabelaRealocacao << "0 ";
             contadorPosicao++;
 
-            // Coletar operandos
-            std::string operandStr;
-            std::vector<std::string> listaOperandos;
-            while (std::getline(iss, operandStr, ','))
+            std::vector<std::string> operandos;
+            std::string operando;
+            while (std::getline(iss, operando, ','))
             {
-                operandStr.erase(std::remove(operandStr.begin(), operandStr.end(), ' '),
-                                 operandStr.end());
-                if (!operandStr.empty())
-                {
-                    listaOperandos.push_back(operandStr);
-                }
+                operando = trim(operando);
+                operandos.push_back(operando);
             }
 
-            // Verifica número de operandos
-            if ((int)listaOperandos.size() != info.numOperandos)
+            if ((int)operandos.size() != infoInstrucao.numOperandos)
             {
-                reportarErro("Número de operandos incorreto para " + instrucao, linhaArq);
+                reportarErro("Número de operandos incorreto para " + instrucao, linhaAtual);
             }
 
-            // Para cada operando
-            for (auto &op : listaOperandos)
+            for (auto &op : operandos)
             {
-                bool temMais = (op.find('+') != std::string::npos);
-                int desloc = 0;
-                if (temMais)
+                int deslocamento = 0;
+                if (op.find('+') != std::string::npos)
                 {
-                    auto plusPos = op.find('+');
-                    std::string deslocStr = op.substr(plusPos + 1);
-                    desloc = std::stoi(deslocStr);
-                    op = op.substr(0, plusPos);
+                    size_t pos = op.find('+');
+                    deslocamento = std::stoi(op.substr(pos + 1));
+                    op = op.substr(0, pos);
                 }
 
-                // Verifica se existe na tabela
-                if (tabelaSimbolos.find(op) == tabelaSimbolos.end())
+                if (tabelaSimbolos.count(op) == 0)
                 {
-                    reportarErro("Símbolo não definido: " + op, linhaArq);
-                }
-
-                int ender = tabelaSimbolos.at(op);
-                if (ender == -1)
-                {
-                    // Símbolo externo => gera entrada na tabela de uso
                     usoSimbolos[op].push_back(contadorPosicao);
-
-                    // No lugar da posição, guardamos apenas o desloc
-                    bufferCodigoObjeto << desloc << " ";
-                    // Requer realocação (1)
-                    bufferTabelaRealocacao << "1 ";
+                    bufferCodigoObjeto << deslocamento << " ";
+                    bufferTabelaRealocacao << "0 ";
                 }
                 else
                 {
-                    // Símbolo local
-                    bufferCodigoObjeto << (ender + desloc) << " ";
-                    // Requer realocação
-                    bufferTabelaRealocacao << "1 ";
+                    int enderecoBase = tabelaSimbolos.at(op);
+                    if (enderecoBase == -1)
+                    {
+                        usoSimbolos[op].push_back(contadorPosicao);
+                        bufferCodigoObjeto << deslocamento << " ";
+                        bufferTabelaRealocacao << "0 ";
+                    }
+                    else
+                    {
+                        bufferCodigoObjeto << (enderecoBase + deslocamento) << " ";
+                        bufferTabelaRealocacao << "1 ";
+                    }
                 }
                 contadorPosicao++;
             }
         }
-        linhaArq++;
+        linhaAtual++;
     }
 
-    // Tabela de uso
-    for (auto &uso : usoSimbolos)
+    for (const auto &uso : usoSimbolos)
     {
-        for (auto &pos : uso.second)
+        for (int endereco : uso.second)
         {
-            bufferTabelaUso << "U, " << uso.first << " " << pos << "\n";
+            bufferTabelaUso << "U, " << uso.first << " " << endereco << "\n";
         }
     }
 
-    // Escreve no arquivo de saída (ordem: defs, uso, realocação, código)
     arquivoSaida << bufferDefinicoes.str();
     arquivoSaida << bufferTabelaUso.str();
     arquivoSaida << "R, " << bufferTabelaRealocacao.str() << "\n";
