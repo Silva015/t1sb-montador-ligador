@@ -1,3 +1,5 @@
+// Montador.h
+
 #ifndef MONTADOR_H
 #define MONTADOR_H
 
@@ -5,7 +7,14 @@
 #include <unordered_map>
 #include <vector>
 
-// Definição de Instrucao
+// Estrutura para armazenar faixa de linhas no MDT
+struct MacroInfo
+{
+    int startIndex; // primeira linha no MDT
+    int endIndex;   // última linha no MDT (inclusivo)
+};
+
+// Ainda temos Instrucao, Diretiva etc.
 struct Instrucao
 {
     int opcode;
@@ -13,19 +22,12 @@ struct Instrucao
     int numOperandos;
 };
 
-// Definição de Diretiva
 struct Diretiva
 {
     int tamanho;
 };
-// ----------------------------------------------------------
-// Estrutura auxiliar para armazenar as linhas de uma macro
-// ----------------------------------------------------------
-struct MacroDefinition
-{
-    std::vector<std::string> linhas;
-};
 
+// Classe Montador
 class Montador
 {
 public:
@@ -33,22 +35,24 @@ public:
     void executar(const std::string &arquivoEntrada, const std::string &modo);
 
 private:
-    // ----------------------------------------------------------
-    // Tabelas de instruções e diretivas
-    // ----------------------------------------------------------
+    // --------------------------------------------
+    // Tabelas de instruções e diretivas (como antes)
+    // --------------------------------------------
     std::unordered_map<std::string, Instrucao> tabelaInstrucoes;
     std::unordered_map<std::string, Diretiva> tabelaDiretivas;
 
-    // ----------------------------------------------------------
-    // Tabela de macros (MNT)
-    // chave: nome da macro
-    // valor: as linhas do corpo da macro
-    // ----------------------------------------------------------
-    std::unordered_map<std::string, MacroDefinition> MNT;
+    // --------------------------------------------
+    // MNT e MDT
+    // --------------------------------------------
+    // MNT: NomeDaMacro -> MacroInfo (start/end no MDT)
+    std::unordered_map<std::string, MacroInfo> MNT;
 
-    // ----------------------------------------------------------
+    // MDT: Vetor com todas as linhas de todas as macros
+    std::vector<std::string> MDT;
+
+    // --------------------------------------------
     // Métodos auxiliares
-    // ----------------------------------------------------------
+    // --------------------------------------------
     void inicializarTabelaInstrucoes();
     void inicializarTabelaDiretivas();
     void preProcessar(const std::string &arquivoEntrada, const std::string &arquivoSaida);
@@ -58,16 +62,14 @@ private:
                          const std::string &arquivoObj,
                          const std::unordered_map<std::string, int> &tabelaSimbolos);
 
-    void reportarErro(const std::string &mensagem, int linha);
+    // Expansão recursiva de macros
+    void expandirLinha(const std::string &linha,
+                       std::vector<std::string> &linhasExpandidas);
 
     bool rotuloValido(const std::string &rotulo);
     bool valorConstValido(const std::string &str);
     int converterStringParaInt(const std::string &str);
-    // Função para expandir recursivamente uma linha que pode ser chamada de macro.
-    void expandirLinha(
-        const std::string &linha,
-        const std::unordered_map<std::string, MacroDefinition> &MNT,
-        std::vector<std::string> &linhasExpandidas);
+    void reportarErro(const std::string &mensagem, int linha);
 };
 
 #endif

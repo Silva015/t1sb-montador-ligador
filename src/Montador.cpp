@@ -232,27 +232,30 @@ std::vector<std::string> split(const std::string &str, const std::string &delimi
     return tokens;
 }
 
-void Montador::expandirLinha(
-    const std::string &linha,
-    const std::unordered_map<std::string, MacroDefinition> &MNT,
-    std::vector<std::string> &linhasExpandidas)
+void Montador::expandirLinha(const std::string &linha,
+                             std::vector<std::string> &linhasExpandidas)
 {
-    // Convertemos a linha para maiúsculas para padronizar buscas na MNT
-    std::string upperLine = upperCase(trim(linha));
+    // Converte para uppercase para padronizar
+    std::string upper = upperCase(trim(linha));
 
-    // Verifica se a linha inteira corresponde ao nome de alguma macro
-    auto it = MNT.find(upperLine);
+    // Verifica se "upper" é o nome de alguma macro
+    auto it = MNT.find(upper);
     if (it != MNT.end())
     {
-        // É macro. Para cada linha do corpo, chamamos recursivamente expandirLinha.
-        for (const auto &subLine : it->second.linhas)
+        // É macro => obtemos o intervalo [startIndex..endIndex] no MDT
+        int start = it->second.startIndex;
+        int end = it->second.endIndex;
+
+        // Para cada linha do corpo no MDT
+        for (int i = start; i <= end; i++)
         {
-            expandirLinha(subLine, MNT, linhasExpandidas);
+            // Se MDT[i] chamar outra macro, expandir recursivamente
+            expandirLinha(MDT[i], linhasExpandidas);
         }
     }
     else
     {
-        // Não é macro, então apenas adicionamos esta linha como está.
+        // Não é macro => adiciona a linha final
         linhasExpandidas.push_back(linha);
     }
 }
@@ -262,66 +265,72 @@ void Montador::expandirLinha(
 // ----------------------------------------------------------------------------
 void Montador::preProcessar(const std::string &arquivoEntrada, const std::string &arquivoSaida)
 {
-    std::ifstream arquivo(arquivoEntrada);
-    std::ofstream arquivoPre(arquivoSaida);
-
-    if (!arquivo.is_open() || !arquivoPre.is_open())
+    std::ifstream in(arquivoEntrada);
+    std::ofstream out(arquivoSaida);
+    if (!in.is_open() || !out.is_open())
     {
-        std::cerr << "Erro ao abrir arquivos para pré-processamento.\n";
+        std::cerr << "Erro ao abrir arquivo para pré-processamento.\n";
         return;
     }
 
-    // Limpa a tabela de macros da classe, se quiser começar do zero
+    // Limpa MNT e MDT, caso já estivessem usados anteriormente.
     MNT.clear();
+    MDT.clear();
 
-    bool dentroDeMacro = false;
-    std::string macroAtual;
-    MacroDefinition macroTemp; // <= do tipo da classe Montador (mesmo nome)
+    bool dentroDeMacro = false; // se estamos lendo linhas de uma macro
+    std::string macroAtual;     // nome da macro atual
 
-    std::vector<std::string> linhasExpandidas;
+    // Temporariamente, vamos armazenar as linhas (fora de macro) num vetor.
+    std::vector<std::string> linhasForaDeMacro;
 
     std::string linha;
-    while (std::getline(arquivo, linha))
+    while (std::getline(in, linha))
     {
         // 1) Remover comentários
-        size_t posComent = linha.find(';');
-        if (posComent != std::string::npos)
-        {
-            linha = linha.substr(0, posComent);
-        }
+        size_t pos = linha.find(';');
+        if (pos != std::string::npos)
+            linha = linha.substr(0, pos);
+
+        // 2) Trim básico
         linha = trim(linha);
         if (linha.empty())
             continue;
 
-        // 2) Se estamos definindo uma macro
+        // Se estamos dentro da definição de uma macro
         if (dentroDeMacro)
         {
-            if (upperCase(trim(linha)) == "ENDMACRO")
+            // Checar se chegou ao "ENDMACRO"
+            if (upperCase(linha) == "ENDMACRO")
             {
-                // Insere no MNT (da classe) usando uppercase como chave
-                MNT[upperCase(macroAtual)] = macroTemp;
+                // Atualiza MNT com endIndex = MDT.size()-1
+                auto &info = MNT[upperCase(macroAtual)];
+                info.endIndex = static_cast<int>(MDT.size()) - 1;
 
                 dentroDeMacro = false;
                 macroAtual.clear();
-                macroTemp.linhas.clear();
             }
             else
             {
-                macroTemp.linhas.push_back(linha);
+                // Linha da macro => empilha no MDT
+                MDT.push_back(linha);
             }
             continue;
         }
 
-        // 3) Detectar "NOME: MACRO" ou "NOME MACRO"
+        // --------------------------------------------------------------------
+        // Se não estamos dentro de macro, pode ser "NOME: MACRO" ou "NOME MACRO"
+        // --------------------------------------------------------------------
         {
             std::istringstream iss(linha);
             std::string token1, token2;
-            iss >> token1;
+            iss >> token1; // p.ex. "TROCA:" ou "TROCA"
 
             bool definindoMacro = false;
+
+            // Caso 1: "LABEL: MACRO"
             if (!token1.empty() && token1.back() == ':')
             {
-                token1.pop_back();
+                token1.pop_back(); // remove ':'
                 iss >> token2;
                 if (upperCase(token2) == "MACRO")
                 {
@@ -331,6 +340,7 @@ void Montador::preProcessar(const std::string &arquivoEntrada, const std::string
             }
             else
             {
+                // Caso 2: "LABEL MACRO"
                 iss >> token2;
                 if (upperCase(token2) == "MACRO")
                 {
@@ -341,27 +351,50 @@ void Montador::preProcessar(const std::string &arquivoEntrada, const std::string
 
             if (definindoMacro)
             {
+                // Iniciando a definição de macro
                 dentroDeMacro = true;
-                macroTemp.linhas.clear();
+
+                // Salva no MNT (uppercase) o startIndex = MDT.size()
+                MacroInfo info;
+                info.startIndex = static_cast<int>(MDT.size());
+                info.endIndex = -1; // ainda não sabemos
+                MNT[upperCase(macroAtual)] = info;
                 continue;
             }
         }
 
-        // 4) Linha que não define macro -> expandir (recursivo) para linhasExpandidas
-        expandirLinha(linha, MNT, linhasExpandidas);
+        // --------------------------------------------------------------------
+        // Linha "comum" (fora de macro), guardamos num vetor
+        // para depois expandir.
+        // --------------------------------------------------------------------
+        linhasForaDeMacro.push_back(linha);
     }
 
-    arquivo.close();
+    in.close();
 
-    // 5) A partir daqui, seu pré-processamento "antigo" (SECTION TEXT, etc.)
+    // Agora, expandimos cada linha fora de macro.
+    // Se for chamada de macro, expandirLinha chamará recursivo e buscará no MDT.
+    std::vector<std::string> linhasExpandidas;
+    for (auto &l : linhasForaDeMacro)
+    {
+        expandirLinha(l, linhasExpandidas);
+    }
+
+    // ------------------------------------------------------------------------
+    // 3) A partir daqui, executamos o seu pré-processamento "antigo"
+    //    para normalizar, detectar SECTION TEXT / SECTION DATA, etc.
+    // ------------------------------------------------------------------------
     std::string sectionText, sectionData;
     std::string labelPendente;
+
     for (auto &rawLine : linhasExpandidas)
     {
+        // Remover espaços duplicados, uppercase etc.
         rawLine = removeSpaces(rawLine);
         rawLine = superTrim(rawLine);
         rawLine = upperCase(rawLine);
 
+        // Detecta SECTION TEXT / SECTION DATA
         if (rawLine == "SECTION TEXT")
         {
             sectionText += "SECTION TEXT\n";
@@ -373,31 +406,42 @@ void Montador::preProcessar(const std::string &arquivoEntrada, const std::string
             continue;
         }
 
+        // Verifica se a linha é só um rótulo (sem espaço)
         if (!rawLine.empty() && rawLine.back() == ':' && rawLine.find(' ') == std::string::npos)
         {
             labelPendente = rawLine;
             continue;
         }
 
+        // Se temos um rótulo pendente, anexa
         if (!labelPendente.empty())
         {
             rawLine = labelPendente + " " + rawLine;
             labelPendente.clear();
         }
 
+        // Decide se escreve em TEXT ou DATA
         if (sectionData.empty())
+        {
             sectionText += rawLine + "\n";
+        }
         else
+        {
             sectionData += rawLine + "\n";
+        }
     }
 
+    // Remove quebra de linha extra em sectionData, se quiser
     if (!sectionData.empty() && sectionData.back() == '\n')
     {
         sectionData.pop_back();
     }
 
-    arquivoPre << sectionText << sectionData;
-    arquivoPre.close();
+    // ------------------------------------------------------------------------
+    // 4) Escreve o resultado final no arquivo .pre
+    // ------------------------------------------------------------------------
+    out << sectionText << sectionData;
+    out.close();
 }
 
 // ============================================================================
