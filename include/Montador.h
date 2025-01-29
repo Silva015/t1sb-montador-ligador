@@ -3,12 +3,9 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
 
-// -- Declaração da função trim:
-std::string trim(const std::string &str);
-
-// -- Suas structs e a classe Montador continuam aqui...
-
+// Definição de Instrucao
 struct Instrucao
 {
     int opcode;
@@ -16,9 +13,17 @@ struct Instrucao
     int numOperandos;
 };
 
+// Definição de Diretiva
 struct Diretiva
 {
     int tamanho;
+};
+// ----------------------------------------------------------
+// Estrutura auxiliar para armazenar as linhas de uma macro
+// ----------------------------------------------------------
+struct MacroDefinition
+{
+    std::vector<std::string> linhas;
 };
 
 class Montador
@@ -28,9 +33,22 @@ public:
     void executar(const std::string &arquivoEntrada, const std::string &modo);
 
 private:
+    // ----------------------------------------------------------
+    // Tabelas de instruções e diretivas
+    // ----------------------------------------------------------
     std::unordered_map<std::string, Instrucao> tabelaInstrucoes;
     std::unordered_map<std::string, Diretiva> tabelaDiretivas;
 
+    // ----------------------------------------------------------
+    // Tabela de macros (MNT)
+    // chave: nome da macro
+    // valor: as linhas do corpo da macro
+    // ----------------------------------------------------------
+    std::unordered_map<std::string, MacroDefinition> MNT;
+
+    // ----------------------------------------------------------
+    // Métodos auxiliares
+    // ----------------------------------------------------------
     void inicializarTabelaInstrucoes();
     void inicializarTabelaDiretivas();
     void preProcessar(const std::string &arquivoEntrada, const std::string &arquivoSaida);
@@ -45,6 +63,11 @@ private:
     bool rotuloValido(const std::string &rotulo);
     bool valorConstValido(const std::string &str);
     int converterStringParaInt(const std::string &str);
+    // Função para expandir recursivamente uma linha que pode ser chamada de macro.
+    void expandirLinha(
+        const std::string &linha,
+        const std::unordered_map<std::string, MacroDefinition> &MNT,
+        std::vector<std::string> &linhasExpandidas);
 };
 
 #endif

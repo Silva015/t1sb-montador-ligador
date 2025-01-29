@@ -45,6 +45,17 @@ bool Montador::rotuloValido(const std::string &rotulo)
     return true;
 }
 
+std::string trim(const std::string &str)
+{
+    auto start = str.find_first_not_of(" \t\n\r");
+    auto end = str.find_last_not_of(" \t\n\r");
+    if (start == std::string::npos)
+    {
+        return "";
+    }
+    return str.substr(start, end - start + 1);
+}
+
 // Verifica se um valor de CONST é válido (aceita decimal +/-, ou hexa 0x...).
 bool Montador::valorConstValido(const std::string &str)
 {
@@ -176,16 +187,6 @@ void Montador::executar(const std::string &arquivoEntrada, const std::string &mo
 // ============================================================================
 // Funções utilitárias de manipulação de strings
 // ----------------------------------------------------------------------------
-std::string trim(const std::string &str)
-{
-    auto start = str.find_first_not_of(" \t\n\r");
-    auto end = str.find_last_not_of(" \t\n\r");
-    if (start == std::string::npos)
-    {
-        return "";
-    }
-    return str.substr(start, end - start + 1);
-}
 
 std::string upperCase(const std::string &str)
 {
@@ -231,6 +232,31 @@ std::vector<std::string> split(const std::string &str, const std::string &delimi
     return tokens;
 }
 
+void Montador::expandirLinha(
+    const std::string &linha,
+    const std::unordered_map<std::string, MacroDefinition> &MNT,
+    std::vector<std::string> &linhasExpandidas)
+{
+    // Convertemos a linha para maiúsculas para padronizar buscas na MNT
+    std::string upperLine = upperCase(trim(linha));
+
+    // Verifica se a linha inteira corresponde ao nome de alguma macro
+    auto it = MNT.find(upperLine);
+    if (it != MNT.end())
+    {
+        // É macro. Para cada linha do corpo, chamamos recursivamente expandirLinha.
+        for (const auto &subLine : it->second.linhas)
+        {
+            expandirLinha(subLine, MNT, linhasExpandidas);
+        }
+    }
+    else
+    {
+        // Não é macro, então apenas adicionamos esta linha como está.
+        linhasExpandidas.push_back(linha);
+    }
+}
+
 // ============================================================================
 // Pré-processamento (gera .pre) - remove comentários, normaliza espaços, etc.
 // ----------------------------------------------------------------------------
@@ -245,71 +271,132 @@ void Montador::preProcessar(const std::string &arquivoEntrada, const std::string
         return;
     }
 
-    std::string linha;
-    std::string sectionText, sectionData;
-    std::string labelPendente = "";
+    // Limpa a tabela de macros da classe, se quiser começar do zero
+    MNT.clear();
 
+    bool dentroDeMacro = false;
+    std::string macroAtual;
+    MacroDefinition macroTemp; // <= do tipo da classe Montador (mesmo nome)
+
+    std::vector<std::string> linhasExpandidas;
+
+    std::string linha;
     while (std::getline(arquivo, linha))
     {
-        // Remove comentário
-        linha = linha.substr(0, linha.find(';'));
+        // 1) Remover comentários
+        size_t posComent = linha.find(';');
+        if (posComent != std::string::npos)
+        {
+            linha = linha.substr(0, posComent);
+        }
         linha = trim(linha);
         if (linha.empty())
             continue;
 
-        // Detectar e organizar seções
-        if (linha == "SECTION TEXT")
+        // 2) Se estamos definindo uma macro
+        if (dentroDeMacro)
+        {
+            if (upperCase(trim(linha)) == "ENDMACRO")
+            {
+                // Insere no MNT (da classe) usando uppercase como chave
+                MNT[upperCase(macroAtual)] = macroTemp;
+
+                dentroDeMacro = false;
+                macroAtual.clear();
+                macroTemp.linhas.clear();
+            }
+            else
+            {
+                macroTemp.linhas.push_back(linha);
+            }
+            continue;
+        }
+
+        // 3) Detectar "NOME: MACRO" ou "NOME MACRO"
+        {
+            std::istringstream iss(linha);
+            std::string token1, token2;
+            iss >> token1;
+
+            bool definindoMacro = false;
+            if (!token1.empty() && token1.back() == ':')
+            {
+                token1.pop_back();
+                iss >> token2;
+                if (upperCase(token2) == "MACRO")
+                {
+                    definindoMacro = true;
+                    macroAtual = token1;
+                }
+            }
+            else
+            {
+                iss >> token2;
+                if (upperCase(token2) == "MACRO")
+                {
+                    definindoMacro = true;
+                    macroAtual = token1;
+                }
+            }
+
+            if (definindoMacro)
+            {
+                dentroDeMacro = true;
+                macroTemp.linhas.clear();
+                continue;
+            }
+        }
+
+        // 4) Linha que não define macro -> expandir (recursivo) para linhasExpandidas
+        expandirLinha(linha, MNT, linhasExpandidas);
+    }
+
+    arquivo.close();
+
+    // 5) A partir daqui, seu pré-processamento "antigo" (SECTION TEXT, etc.)
+    std::string sectionText, sectionData;
+    std::string labelPendente;
+    for (auto &rawLine : linhasExpandidas)
+    {
+        rawLine = removeSpaces(rawLine);
+        rawLine = superTrim(rawLine);
+        rawLine = upperCase(rawLine);
+
+        if (rawLine == "SECTION TEXT")
         {
             sectionText += "SECTION TEXT\n";
             continue;
         }
-        if (linha == "SECTION DATA")
+        if (rawLine == "SECTION DATA")
         {
             sectionData += "SECTION DATA\n";
             continue;
         }
 
-        // Normaliza e converte para maiúsculas
-        linha = removeSpaces(linha);
-        linha = superTrim(linha);
-        linha = upperCase(linha);
-
-        // Verifica se é só um rótulo
-        if (!linha.empty() && linha.back() == ':' && linha.find(' ') == std::string::npos)
+        if (!rawLine.empty() && rawLine.back() == ':' && rawLine.find(' ') == std::string::npos)
         {
-            // Se não tem espaço e termina em ':', é um rótulo sozinho
-            labelPendente = linha;
+            labelPendente = rawLine;
             continue;
         }
 
-        // Se havia um rótulo pendente, cola com a instrução
         if (!labelPendente.empty())
         {
-            linha = labelPendente + " " + linha;
+            rawLine = labelPendente + " " + rawLine;
             labelPendente.clear();
         }
 
-        // Adiciona à seção apropriada
         if (sectionData.empty())
-        {
-            sectionText += linha + "\n";
-        }
+            sectionText += rawLine + "\n";
         else
-        {
-            sectionData += linha + "\n";
-        }
+            sectionData += rawLine + "\n";
     }
 
-    // Remove quebra de linha extra no final da seção DATA
     if (!sectionData.empty() && sectionData.back() == '\n')
     {
         sectionData.pop_back();
     }
 
-    // Escreve no arquivo .pre
     arquivoPre << sectionText << sectionData;
-
-    arquivo.close();
     arquivoPre.close();
 }
 
